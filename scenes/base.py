@@ -2,9 +2,10 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
-from manim import Scene, ValueTracker, linear  # noqa: E402
+from manim import Scene, ValueTracker, linear, tempconfig  # noqa: E402
 
 from params import Geometry, Style  # noqa: E402
 from visuals.panels import Frame, backdrop  # noqa: E402
@@ -39,3 +40,19 @@ class PIDScene(Scene):
         """Проиграть траекторию до момента t_to (плюс одновременные анимации extra)."""
         dur = (t_to - self.t.get_value()) / (speed or self.speed)
         self.play(self.t.animate.set_value(t_to), *extra, run_time=dur, rate_func=linear)
+
+
+def render(scene_cls, quality="low_quality", still=False, preview=True):
+    """Запуск кнопкой ▶ в PyCharm.
+
+    Видео → media/videos/<Сцена>/, still=True — последний кадр png → renders/<Сцена>.png.
+    quality: "low_quality" (480p, черновик), "medium_quality" (720p), "high_quality" (1080p).
+    То же, что `manim -pql scenes/<файл>.py <Сцена>` (с -s для кадра).
+    """
+    name = scene_cls.__name__
+    cfg = {"quality": quality, "preview": preview, "output_file": name,
+           "media_dir": str(ROOT / "media"), "video_dir": str(ROOT / "media" / "videos" / name)}
+    if still:
+        cfg.update(save_last_frame=True, write_to_movie=False, images_dir=str(ROOT / "renders"))
+    with tempconfig(cfg):
+        scene_cls().render()

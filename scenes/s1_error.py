@@ -10,7 +10,7 @@ from manim import FadeIn, FadeOut, ValueTracker, linear  # noqa: E402
 import model  # noqa: E402
 import track  # noqa: E402
 from params import Sensor  # noqa: E402
-from scenes.base import PIDScene  # noqa: E402
+from scenes.base import PIDScene, render  # noqa: E402
 from visuals.panels import Plot, Header, legend, text  # noqa: E402
 
 E = "<i>e</i> = <i>L</i> − <i>R</i>"
@@ -72,3 +72,9 @@ class Scene1(PIDScene):
             cap.move_to(plot.to_screen([0.1], [-900])[0], aligned_edge=cap.get_left() - cap.get_center())
             self.play(FadeIn(cap.set_z_index(13)))
         self.wait(1.5)
+
+
+if __name__ == "__main__":
+    # Кнопка ▶ в PyCharm: черновое видео 480p и сразу открыть.
+    # Кадр png 1080p: render(Scene1, "high_quality", still=True)
+    render(Scene1)
