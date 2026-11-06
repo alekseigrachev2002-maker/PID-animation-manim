@@ -23,7 +23,7 @@ def chassis(g: Geometry, st: Style, edge_w):
     body.set_stroke(color=st.chassis_edge, width=edge_w)
     # блик глянца: дуга у края с верхней левой стороны
     glare = Arc(radius=g.chassis_r - 7, start_angle=math.radians(105), angle=math.radians(50))
-    glare.set_stroke(color=st.glare, width=4 * edge_w, opacity=0.18)
+    glare.set_stroke(color=st.glare, width=4 * edge_w, opacity=st.glare_opacity)
     return VGroup(body, glare)
 
 

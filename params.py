@@ -76,10 +76,11 @@ class Style:
     muted: str = "#8A94A6"
     axis: str = "#3A3F48"
     block: str = "#1A1F29"
-    chassis: str = "#141518"        # глянцевый чёрный: основной тон
-    chassis_hi: str = "#3A3F48"     # глянцевый чёрный: светлая сторона градиента
-    chassis_edge: str = "#5A616D"   # кант по краю шасси
+    chassis: str = "#262A31"        # глянцевый чёрный: основной тон
+    chassis_hi: str = "#555C68"     # глянцевый чёрный: светлая сторона градиента
+    chassis_edge: str = "#7A828F"   # кант по краю шасси
     glare: str = "#FFFFFF"          # блик
+    glare_opacity: float = 0.30
     chassis_opacity: float = 1.0
     wheel: str = "#1D1D1F"
     tread: str = "#6E6E73"
