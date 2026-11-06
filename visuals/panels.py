@@ -1,7 +1,7 @@
 """Макет кадра: фон, шапка, легенда, график. Перевод мм и пикселей в единицы Manim — только здесь (Frame)."""
 import numpy as np
 from manim import (DOWN, LEFT, RIGHT, UP, DashedLine, Dot, Line, MarkupText, Rectangle, RoundedRectangle,
-                   Text, ValueTracker, VGroup, VMobject, config, FadeIn, FadeTransform)
+                   Text, ValueTracker, VGroup, VMobject, config, FadeIn, FadeOut, Succession)
 
 from params import Layout, Style
 
@@ -93,13 +93,13 @@ class Header(VGroup):
         return g.set_z_index(Z_UI)
 
     def _swap(self, attr, new):
+        """Замена элемента шапки: старый уходит, затем появляется новый (без морфинга букв)."""
         old = getattr(self, attr)
         setattr(self, attr, new)
-        self.add(new)
         if old is None:
             return FadeIn(new, shift=0.1 * DOWN)
         self.remove(old)
-        return FadeTransform(old, new)
+        return swap(old, new)
 
     def set_formula(self, markup, color):
         return self._swap("block", self._block(markup, color))
@@ -111,6 +111,11 @@ class Header(VGroup):
         """Смена этапа: новая фраза и пояснение."""
         anim = self._swap("phrase", self._phrase(phrase))
         return [anim, self.set_caption(caption)]
+
+
+def swap(old, new, shift=0.08):
+    """Смена текста: старый гаснет, уходя вверх, затем новый проявляется снизу."""
+    return Succession(FadeOut(old, shift=shift * UP), FadeIn(new, shift=shift * UP))
 
 
 # ---------- легенда ----------

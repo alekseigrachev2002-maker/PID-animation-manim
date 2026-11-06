@@ -5,13 +5,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np  # noqa: E402
-from manim import FadeIn, FadeOut, ValueTracker, linear  # noqa: E402
+from manim import ValueTracker, linear  # noqa: E402
 
 import model  # noqa: E402
 import track  # noqa: E402
 from params import Sensor  # noqa: E402
 from scenes.base import PIDScene, render  # noqa: E402
-from visuals.panels import Plot, Header, legend  # noqa: E402
+from visuals.panels import Plot, Header, legend, swap  # noqa: E402
 
 E = "e = L − R"
 
@@ -58,7 +58,7 @@ class Scene1(PIDScene):
         cE = plot.curve(traj.tt, traj.e, st.e, lambda: min(e_end.get_value(), self.t.get_value()), width_px=3)
         leg2 = legend(fr, [(st.L, "L", 0.35), (st.R, "R", 0.35), (st.e, "e = L − R", 1)], st)
         self.play(dim.animate.set_value(0.35), prog.animate.set_value(1.0), plot.lo.animate.set_value(-1023),
-                  ref_op.animate.set_value(0.0), FadeOut(leg1), FadeIn(leg2), header.set_formula(E, st.e),
+                  ref_op.animate.set_value(0.0), swap(leg1, leg2), header.set_formula(E, st.e),
                   header.set_caption("разность сигналов"),
                   run_time=1.2)
         self.add(cE)
