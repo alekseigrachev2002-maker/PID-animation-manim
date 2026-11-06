@@ -11,7 +11,7 @@ import numpy as np  # noqa: E402
 
 from params import Geometry, Sensor, Style  # noqa: E402
 from visuals.panels import Frame, backdrop  # noqa: E402
-from visuals.robot import Robot  # noqa: E402
+from visuals.robot import PwmLabels, Robot  # noqa: E402
 from visuals.world import World, XRay  # noqa: E402
 
 
@@ -23,24 +23,39 @@ class PIDScene(Scene):
         self.t = ValueTracker(0.0)
         self.add(backdrop(self.fr, self.st))
 
-    def bind(self, traj, track):
-        """Робот и мир, которые следуют траектории traj по трекеру self.t."""
+    def bind(self, traj, track, pwm=False):
+        """Робот и мир, которые следуют траектории self.traj по трекеру self.t; pwm — числа ШИМ у колёс."""
+        self.traj = traj
         world = World(self.fr, track, st=self.st)
         robot = Robot(self.fr, self.geom, self.st)
         xray = XRay(self.fr, track, self.geom, st=self.st) if self.st.xray else None
+        labels = PwmLabels(self.fr, self.st) if pwm else None
 
         def follow(m):
-            p = traj.at(self.t.get_value())
+            tr, t = self.traj, self.t.get_value()
+            p = tr.at(t)
             robot.set_pose(p["psi"]).set_wheel_phase(p["sL"], p["sR"])
-            robot.set_signals(*self.levels(traj, self.t.get_value()))
+            robot.set_signals(*self.levels(tr, t))
             world.set_robot_xy(p["x"], p["y"])
             if xray is not None:
                 xray.set_pose(p["x"], p["y"], p["psi"])
+            if labels is not None:
+                sig = tr.signals_at(t)
+                labels.set_values(p["psi"], sig["pwmL"], sig["pwmR"])
 
         robot.add_updater(follow)
         follow(robot)
-        self.add(world, robot, *([xray] if xray else []))
+        movers = [m for m in (world, xray, labels) if m is not None]
+        for m in movers:
+            # их двигает апдейтер робота; пустой апдейтер говорит Manim перерисовывать их каждый кадр
+            m.add_updater(lambda m: None)
+        self.add(robot, *movers)
         return robot, world
+
+    def switch(self, traj, t=0.0):
+        """Подменить проигрываемую траекторию (новый прогон)."""
+        self.traj = traj
+        self.t.set_value(t)
 
     def levels(self, traj, t):
         """Показания L, R в момент t, нормированные: 0 — белое, 1 — чёрное."""
