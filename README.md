@@ -1,6 +1,6 @@
 # ПИД на роботе по линии — анимации Manim
 
-Решения и сюжет сцен: `docs/spec.md`. Исходники робота: `assets/`.
+Решения и сюжет сцен: `docs/spec.md`. Замеры, которые ждёт модель: `docs/measurements.md`. Исходники робота: `assets/`.
 
 ```
 pip install numpy scipy matplotlib pytest
