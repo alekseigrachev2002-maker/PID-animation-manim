@@ -7,7 +7,9 @@ sys.path.insert(0, str(ROOT))
 
 from manim import Scene, ValueTracker, linear, tempconfig  # noqa: E402
 
-from params import Geometry, Style  # noqa: E402
+import numpy as np  # noqa: E402
+
+from params import Geometry, Sensor, Style  # noqa: E402
 from visuals.panels import Frame, backdrop  # noqa: E402
 from visuals.robot import Robot  # noqa: E402
 from visuals.world import World, XRay  # noqa: E402
@@ -17,7 +19,7 @@ class PIDScene(Scene):
     speed = 1.0   # скорость проигрывания: 0.5 — вдвое медленнее реального времени
 
     def setup(self):
-        self.fr, self.st, self.geom = Frame(), Style(), Geometry()
+        self.fr, self.st, self.geom, self.sensor = Frame(), Style(), Geometry(), Sensor()
         self.t = ValueTracker(0.0)
         self.add(backdrop(self.fr, self.st))
 
@@ -30,6 +32,7 @@ class PIDScene(Scene):
         def follow(m):
             p = traj.at(self.t.get_value())
             robot.set_pose(p["psi"]).set_wheel_phase(p["sL"], p["sR"])
+            robot.set_signals(*self.levels(traj, self.t.get_value()))
             world.set_robot_xy(p["x"], p["y"])
             if xray is not None:
                 xray.set_pose(p["x"], p["y"], p["psi"])
@@ -38,6 +41,12 @@ class PIDScene(Scene):
         follow(robot)
         self.add(world, robot, *([xray] if xray else []))
         return robot, world
+
+    def levels(self, traj, t):
+        """Показания L, R в момент t, нормированные: 0 — белое, 1 — чёрное."""
+        sig = traj.signals_at(t)
+        w, b = np.asarray(self.sensor.white, float), np.asarray(self.sensor.black, float)
+        return (np.array([sig["L"], sig["R"]]) - w) / (b - w)
 
     def advance(self, t_to, *extra, speed=None):
         """Проиграть траекторию до момента t_to (плюс одновременные анимации extra)."""

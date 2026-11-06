@@ -2,12 +2,13 @@
 import numpy as np
 import math
 
-from manim import UL, Arc, Circle, Difference, Rectangle, RoundedRectangle, Union, VGroup, VMobject
+from manim import UL, WHITE, Arc, interpolate_color, ManimColor, Circle, Difference, Rectangle, RoundedRectangle, Union, VGroup, VMobject
 
 from params import Geometry, Style
 
+HALO_R = (11.0, 8.0, 5.5)   # ореол метки: круги внахлёст, к краю свечение слабее
 N_TREAD = 18          # шевронов ёлочки по окружности колеса
-Z = dict(wheel=1, tread=2, board=3, chassis=4)
+Z = dict(wheel=1, tread=2, board=3, chassis=4, marker=5)
 
 
 def _rect(w, h, cx, cy, r=0.0, **kw):
@@ -47,6 +48,23 @@ def boards(g: Geometry, st: Style):
     return out
 
 
+def markers(g: Geometry, st: Style):
+    """Метки оптического центра на платах [L, R]: ореол цвета сигнала и ядро."""
+    out = VGroup()
+    for s, color in ((-1, st.L), (1, st.R)):
+        c = [s * g.sensor_x, g.sensor_y, 0]
+        halo = VGroup(*[Circle(radius=r, stroke_width=0).set_fill(color, 0).move_to(c) for r in HALO_R])
+        core = Circle(radius=3.2, stroke_width=0).set_fill(marker_core(color, 0.0), 1).move_to(c)
+        out.add(VGroup(halo, core))
+    return out
+
+
+def marker_core(color, level):
+    """Цвет ядра метки: тёмный оттенок платы (белое под датчиком) → почти белый (чёрное)."""
+    dim = interpolate_color(ManimColor(color), ManimColor("#000000"), 0.45)
+    return interpolate_color(dim, WHITE, 0.85 * level)
+
+
 def tread_points(g: Geometry, side, phase):
     """Шевроны видимой половины колеса: [(точки 3×2 мм, видимость 0…1)].
 
@@ -74,8 +92,9 @@ class Robot(VGroup):
         self.psi = 0.0
         self.treads = VGroup(*[VMobject(stroke_color=st.tread) for _ in range(2 * N_TREAD)])
         # оптопара TCRT стоит на нижней стороне платы и сверху не видна — не рисуем
+        self.markers = markers(geom, st)
         parts = dict(wheel=wheels(geom, st), tread=self.treads, board=boards(geom, st),
-                     chassis=chassis(geom, st, fr.stroke(1.2)))
+                     chassis=chassis(geom, st, fr.stroke(1.2)), marker=self.markers)
         self.body = parts["chassis"][0]
         self.glare = parts["chassis"][1] if len(parts["chassis"]) > 1 else None
         for name, m in parts.items():
@@ -97,6 +116,15 @@ class Robot(VGroup):
             self.glare.rotate(-d, about_point=self.fr.anchor)
             self.body.set_sheen_direction(UL)
         self.psi = psi
+        return self
+
+    def set_signals(self, lvL, lvR):
+        """Яркость меток датчиков: 0 — белое под датчиком, 1 — чёрное."""
+        for (halo, core), lv, color in zip(self.markers, (lvL, lvR), (self.st.L, self.st.R)):
+            lv = float(np.clip(lv, 0, 1))
+            for ring in halo:
+                ring.set_fill(opacity=self.st.glow * lv / 2)
+            core.set_fill(marker_core(color, lv))
         return self
 
     def set_wheel_phase(self, sL, sR):
