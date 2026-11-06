@@ -73,3 +73,11 @@ def test_stuck_wheel_needs_start_threshold():
 def test_line_distance_exact_between_samples():
     d = LINE.lines[0].distance(np.array([[3.0, 0.25], [-7.0, 10.1]]))
     assert d == pytest.approx([3.0, 7.0], abs=1e-9)
+
+
+def test_delay_queue():
+    from collections import deque
+    lag = deque([(0, 0)] * 2)
+    out = [model.delayed(lag, (k, k)) for k in (1, 2, 3)]
+    assert out == [(0, 0), (0, 0), (1, 1)]
+    assert model.delayed(deque(), (5, 5)) == (5, 5)

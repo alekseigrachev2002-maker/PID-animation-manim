@@ -4,6 +4,7 @@
 Регулятор дискретный (ZOH между тиками), робот непрерывный: solve_ivp от тика до тика.
 """
 import hashlib
+from collections import deque
 from dataclasses import dataclass, fields
 from pathlib import Path
 
@@ -95,6 +96,12 @@ def wheel_target(pwm, moving, motor: Motor):
     return np.sign(pwm) * motor.k * max(0.0, abs(pwm) - motor.pwm_stop)
 
 
+def delayed(lag, cmd):
+    """Очередь задержки: кладём новую команду, достаём самую старую (пустая очередь — без задержки)."""
+    lag.append(cmd)
+    return lag.popleft()
+
+
 # ---------- кинематика ----------
 
 def rhs(t, s, vtL, vtR, tau, b):
@@ -168,6 +175,7 @@ def simulate(track, pose0, ctrl=Controller(), t_end=5.0, geom=Geometry(), sensor
     per_tick = int(round(ctrl.period / GRID))
     cont, ticks = [], []
     e_old, lost_at = None, np.nan
+    lag = deque([(ctrl.speed, ctrl.speed)] * int(round(motor.delay / ctrl.period)))
     for k in range(n_ticks):
         t0 = k * ctrl.period
         L, R = read_sensors(track, s[:3], geom, sensor, rng)
@@ -176,10 +184,11 @@ def simulate(track, pose0, ctrl=Controller(), t_end=5.0, geom=Geometry(), sensor
         uP, uD = control_parts(e, e_old, ctrl)
         pL, pR = motor_pwm(uP + uD, ctrl)
         e_old = e
-        moving = [update_moving(m, v, p, motor) for m, v, p in zip(moving, s[3:5], (pL, pR))]
+        aL, aR = delayed(lag, (pL, pR))
+        moving = [update_moving(m, v, p, motor) for m, v, p in zip(moving, s[3:5], (aL, aR))]
         s[3] = s[3] if moving[0] else 0.0
         s[4] = s[4] if moving[1] else 0.0
-        vt = (wheel_target(pL, moving[0], motor), wheel_target(pR, moving[1], motor))
+        vt = (wheel_target(aL, moving[0], motor), wheel_target(aR, moving[1], motor))
         sol = solve_ivp(rhs, (t0, t0 + ctrl.period), s, args=(*vt, motor.tau, geom.track_width),
                         dense_output=True, rtol=1e-8, atol=1e-8)
         tg = t0 + GRID * np.arange(per_tick)

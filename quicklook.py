@@ -39,7 +39,7 @@ def plot_s1():
     save(fig, "s1")
 
 
-def plot_runs(trajs, labels, name, title, track_obj=None):
+def plot_runs(trajs, labels, name, title, track_obj=None, xlim=None):
     """Курс, ошибка, u-части и путь для серии прогонов."""
     fig = plt.figure(figsize=(14, 8))
     gs = fig.add_gridspec(3, 2, width_ratios=[2, 1])
@@ -61,18 +61,25 @@ def plot_runs(trajs, labels, name, title, track_obj=None):
         ax_p.axhline(p, color="gray", lw=.8, ls="-.")
     ax_e.set_ylabel("e"); ax_u.set_ylabel("uP (—), uD (···)"); ax_p.set_ylabel("ШИМ L (—), R (--)")
     ax_p.set_xlabel("t, с"); ax_e.legend(fontsize=8)
-    ax_xy.set_aspect("equal"); ax_xy.set_title("путь середины оси, мм")
+    if xlim:
+        ys = np.concatenate([tj.y for tj in trajs])
+        ax_xy.set_xlim(*xlim); ax_xy.set_ylim(ys.min() - 50, ys.max() + 50)
+    else:
+        ax_xy.set_aspect("equal")
+    ax_xy.set_title("путь середины оси, мм")
     for a in (ax_e, ax_u, ax_p, ax_xy):
         a.grid(alpha=.3)
     fig.suptitle(title)
     save(fig, name)
 
 
-def plot_s2a(kps=(0.05, 0.1, 0.3, 0.8, 2.0), psi0=15.0, t_end=2.0):
-    tr = track.straight()
-    trajs = [model.cached_simulate(tr, (0.0, 0.0, np.radians(psi0)), ctrl=Controller(kp=k), t_end=t_end)
-             for k in kps]
-    plot_runs(trajs, [f"kp={k}" for k in kps], "s2a", f"Подбор P: старт с поворотом {psi0}°", tr)
+def plot_s2a(kps=(0.1, 0.3, 0.5, 0.8), psi0=15.0, t_end=2.5, delay=0.02):
+    tr = track.straight(y1=6000)
+    motor = Motor(delay=delay)
+    trajs = [model.cached_simulate(tr, (0.0, 0.0, np.radians(psi0)), ctrl=Controller(kp=k), motor=motor,
+                                   t_end=t_end) for k in kps]
+    plot_runs(trajs, [f"kp={k}" for k in kps], "s2a",
+              f"Подбор P: старт с поворотом {psi0}°, задержка {delay * 1000:.0f} мс", tr, xlim=(-60, 60))
 
 
 def plot_s2b(kp=0.08, kds=(0.0, 2.0), size=(1200, 900), radii=(220, 95, 240, 95), t_end=16.0):
