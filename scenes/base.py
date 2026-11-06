@@ -10,7 +10,7 @@ from manim import Scene, ValueTracker, linear, tempconfig  # noqa: E402
 from params import Geometry, Style  # noqa: E402
 from visuals.panels import Frame, backdrop  # noqa: E402
 from visuals.robot import Robot  # noqa: E402
-from visuals.world import World  # noqa: E402
+from visuals.world import World, XRay  # noqa: E402
 
 
 class PIDScene(Scene):
@@ -25,15 +25,18 @@ class PIDScene(Scene):
         """Робот и мир, которые следуют траектории traj по трекеру self.t."""
         world = World(self.fr, track, st=self.st)
         robot = Robot(self.fr, self.geom, self.st)
+        xray = XRay(self.fr, track, self.geom, st=self.st) if self.st.xray else None
 
         def follow(m):
             p = traj.at(self.t.get_value())
             robot.set_pose(p["psi"]).set_wheel_phase(p["sL"], p["sR"])
             world.set_robot_xy(p["x"], p["y"])
+            if xray is not None:
+                xray.set_pose(p["x"], p["y"], p["psi"])
 
         robot.add_updater(follow)
         follow(robot)
-        self.add(world, robot)
+        self.add(world, robot, *([xray] if xray else []))
         return robot, world
 
     def advance(self, t_to, *extra, speed=None):

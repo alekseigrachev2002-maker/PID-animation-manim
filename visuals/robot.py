@@ -16,12 +16,15 @@ def _rect(w, h, cx, cy, r=0.0, **kw):
 
 
 def chassis(g: Geometry, st: Style, edge_w):
+    """Шасси: круг с вырезами под колёса. Глянец — VGroup(корпус, блик), мат — VGroup(корпус)."""
     x0, x1 = g.cutout_x
     cuts = [_rect(x1 - x0, g.cutout_h, s * (x0 + x1) / 2, 0, g.cutout_r) for s in (-1, 1)]
     body = Difference(Circle(radius=g.chassis_r), Union(*cuts))
-    body.set_fill(color=[st.chassis, st.chassis_hi], opacity=st.chassis_opacity).set_sheen_direction(UL)
     body.set_stroke(color=st.chassis_edge, width=edge_w)
-    # блик глянца: дуга у края с верхней левой стороны
+    if st.chassis_finish == "flat":
+        return VGroup(body.set_fill(color=st.chassis_flat, opacity=st.chassis_opacity))
+    body.set_fill(color=[st.chassis, st.chassis_hi], opacity=st.chassis_opacity).set_sheen_direction(UL)
+    # блик глянца: дуга у края сверху слева; при повороте робота стоит на месте (свет неподвижен)
     glare = Arc(radius=g.chassis_r - 7, start_angle=math.radians(105), angle=math.radians(50))
     glare.set_stroke(color=st.glare, width=4 * edge_w, opacity=st.glare_opacity)
     return VGroup(body, glare)
@@ -73,6 +76,8 @@ class Robot(VGroup):
         # оптопара TCRT стоит на нижней стороне платы и сверху не видна — не рисуем
         parts = dict(wheel=wheels(geom, st), tread=self.treads, board=boards(geom, st),
                      chassis=chassis(geom, st, fr.stroke(1.2)))
+        self.body = parts["chassis"][0]
+        self.glare = parts["chassis"][1] if len(parts["chassis"]) > 1 else None
         for name, m in parts.items():
             if name != "tread":
                 m.scale(fr.mm, about_point=np.zeros(3)).shift(fr.anchor)
@@ -86,7 +91,11 @@ class Robot(VGroup):
         return np.column_stack([p, np.zeros(len(p))]) + self.fr.anchor
 
     def set_pose(self, psi):
-        self.rotate(psi - self.psi, about_point=self.fr.anchor)
+        d = psi - self.psi
+        self.rotate(d, about_point=self.fr.anchor)
+        if self.glare is not None:   # свет неподвижен: блик и градиент не вращаются с роботом
+            self.glare.rotate(-d, about_point=self.fr.anchor)
+            self.body.set_sheen_direction(UL)
         self.psi = psi
         return self
 
