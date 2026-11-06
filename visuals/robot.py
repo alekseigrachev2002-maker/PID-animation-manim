@@ -1,6 +1,8 @@
 """Робот сверху. Строится в мм (система робота: +y вперёд), на экран — через Frame (масштаб и точка оси)."""
 import numpy as np
-from manim import Circle, Difference, Rectangle, RoundedRectangle, Union, VGroup, VMobject
+import math
+
+from manim import UL, Arc, Circle, Difference, Rectangle, RoundedRectangle, Union, VGroup, VMobject
 
 from params import Geometry, Style
 
@@ -17,8 +19,12 @@ def chassis(g: Geometry, st: Style, edge_w):
     x0, x1 = g.cutout_x
     cuts = [_rect(x1 - x0, g.cutout_h, s * (x0 + x1) / 2, 0, g.cutout_r) for s in (-1, 1)]
     body = Difference(Circle(radius=g.chassis_r), Union(*cuts))
-    return body.set_style(fill_color=st.chassis, fill_opacity=0.55, stroke_color=st.chassis_edge,
-                          stroke_width=edge_w)
+    body.set_fill(color=[st.chassis, st.chassis_hi], opacity=st.chassis_opacity).set_sheen_direction(UL)
+    body.set_stroke(color=st.chassis_edge, width=edge_w)
+    # блик глянца: дуга у края с верхней левой стороны
+    glare = Arc(radius=g.chassis_r - 7, start_angle=math.radians(105), angle=math.radians(50))
+    glare.set_stroke(color=st.glare, width=4 * edge_w, opacity=0.18)
+    return VGroup(body, glare)
 
 
 def wheels(g: Geometry, st: Style):
@@ -31,7 +37,7 @@ def boards(g: Geometry, st: Style):
     out = VGroup()
     for s, color in ((-1, st.L), (1, st.R)):
         board = _rect(g.board_w, g.board_len, s * g.sensor_x, front - g.board_len / 2, 0.8,
-                      fill_color=color, fill_opacity=0.92, stroke_width=0)
+                      fill_color=color, fill_opacity=1, stroke_width=0)
         hole = Circle(radius=1.5, fill_color=st.field, fill_opacity=1, stroke_width=0).move_to(
             [s * g.sensor_x, front - 2.5, 0])
         out.add(VGroup(board, hole))

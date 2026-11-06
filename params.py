@@ -76,8 +76,11 @@ class Style:
     muted: str = "#8A94A6"
     axis: str = "#3A3F48"
     block: str = "#1A1F29"
-    chassis: str = "#3A4656"
-    chassis_edge: str = "#2A3340"
+    chassis: str = "#141518"        # глянцевый чёрный: основной тон
+    chassis_hi: str = "#3A3F48"     # глянцевый чёрный: светлая сторона градиента
+    chassis_edge: str = "#5A616D"   # кант по краю шасси
+    glare: str = "#FFFFFF"          # блик
+    chassis_opacity: float = 1.0
     wheel: str = "#1D1D1F"
     tread: str = "#6E6E73"
 
@@ -86,9 +89,9 @@ class Style:
 class Layout:
     """Макет в пикселях эталонного кадра 1280×720 (начало — левый верхний угол)."""
     width_px: float = 1280.0
-    px_per_mm: float = 2.2
+    px_per_mm: float = 1.6                    # масштаб робота (было 2.2)
     graph_w_px: float = 853.0                 # левая панель графиков, 2/3 ширины
-    robot_px: tuple = (1066.5, 400.0)         # середина оси колёс на экране
+    robot_px: tuple = (1066.5, 440.0)         # середина оси колёс на экране (ниже центра — больше видно впереди)
     plot_px: tuple = (84.0, 132.0, 809.0, 602.0)  # область графика: x0, y0, x1, y1
     header_y_px: float = 46.0
     legend_y_px: float = 688.0
