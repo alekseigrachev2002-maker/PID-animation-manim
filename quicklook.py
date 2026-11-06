@@ -75,7 +75,7 @@ def plot_s2a(kps=(0.05, 0.1, 0.3, 0.8, 2.0), psi0=15.0, t_end=2.0):
     plot_runs(trajs, [f"kp={k}" for k in kps], "s2a", f"Подбор P: старт с поворотом {psi0}°", tr)
 
 
-def plot_s2b(kp=0.3, kds=(0.0, 2.0), size=(1200, 900), radii=(220, 95, 240, 95), t_end=16.0):
+def plot_s2b(kp=0.08, kds=(0.0, 2.0), size=(1200, 900), radii=(220, 95, 240, 95), t_end=16.0):
     tr = track.rounded_rect(*size, radii)
     pose0 = (size[0] / 2, 0.0, 0.0)
     trajs = [model.cached_simulate(tr, pose0, ctrl=Controller(kp=kp, kd=kd), t_end=t_end) for kd in kds]
