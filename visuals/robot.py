@@ -5,7 +5,7 @@ from manim import Circle, Difference, Rectangle, RoundedRectangle, Union, VGroup
 from params import Geometry, Style
 
 N_TREAD = 18          # шевронов ёлочки по окружности колеса
-Z = dict(wheel=1, tread=2, board=3, chassis=4, spot=5, tcrt=6)
+Z = dict(wheel=1, tread=2, board=3, chassis=4)
 
 
 def _rect(w, h, cx, cy, r=0.0, **kw):
@@ -38,23 +38,6 @@ def boards(g: Geometry, st: Style):
     return out
 
 
-def spots(g: Geometry, st: Style):
-    return VGroup(*[Circle(radius=6.5, fill_color=c, fill_opacity=0.22, stroke_width=0).move_to(
-        [s * g.sensor_x, g.sensor_y, 0]) for s, c in ((-1, st.L), (1, st.R))])
-
-
-def tcrt(g: Geometry, st: Style):
-    """Корпус TCRT5000 сверху и два купола: излучатель (синий) впереди, приёмник сзади. Купола чуть увеличены."""
-    out = VGroup()
-    for s in (-1, 1):
-        x, y = s * g.sensor_x, g.sensor_y
-        out.add(VGroup(
-            _rect(5.8, 10.2, x, y, 0.6, fill_color=st.tcrt, fill_opacity=1, stroke_width=0),
-            Circle(radius=1.6, fill_color=st.emitter, fill_opacity=1, stroke_width=0).move_to([x, y + 2.2, 0]),
-            Circle(radius=1.6, fill_color=st.receiver, fill_opacity=1, stroke_width=0).move_to([x, y - 2.2, 0])))
-    return out
-
-
 def tread_points(g: Geometry, side, phase):
     """Шевроны видимой половины колеса: [(точки 3×2 мм, видимость 0…1)].
 
@@ -81,8 +64,9 @@ class Robot(VGroup):
         self.fr, self.geom, self.st = fr, geom, st
         self.psi = 0.0
         self.treads = VGroup(*[VMobject(stroke_color=st.tread) for _ in range(2 * N_TREAD)])
+        # оптопара TCRT стоит на нижней стороне платы и сверху не видна — не рисуем
         parts = dict(wheel=wheels(geom, st), tread=self.treads, board=boards(geom, st),
-                     chassis=chassis(geom, st, fr.stroke(1.2)), spot=spots(geom, st), tcrt=tcrt(geom, st))
+                     chassis=chassis(geom, st, fr.stroke(1.2)))
         for name, m in parts.items():
             if name != "tread":
                 m.scale(fr.mm, about_point=np.zeros(3)).shift(fr.anchor)

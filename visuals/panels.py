@@ -146,7 +146,7 @@ class Plot:
         g = VGroup(y_axis, x_axis)
         for tk in t_ticks:
             g.add(text(fr, str(tk), 13, st.muted, st).move_to(fr.px(x0 + tk / self.t_max * (x1 - x0), y1 + 16)))
-        g.add(text(fr, "t, с", 13, st.muted, st, slant="ITALIC").move_to(fr.px(x1, y1 + 16), aligned_edge=RIGHT))
+        g.add(text(fr, "t, с", 13, st.muted, st).move_to(fr.px(x1, y1 + 16), aligned_edge=RIGHT))
         g.add(text(fr, y_label, 13, st.muted, st).move_to(fr.px(x0 + 8, y0 - 12), aligned_edge=LEFT))
         for val, op in ticks.items():
             lab = text(fr, f"{val:g}".replace("-", "−"), 13, st.muted, st)

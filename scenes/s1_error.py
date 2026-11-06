@@ -13,7 +13,7 @@ from params import Sensor  # noqa: E402
 from scenes.base import PIDScene, render  # noqa: E402
 from visuals.panels import Plot, Header, legend, text  # noqa: E402
 
-E = "<i>e</i> = <i>L</i> − <i>R</i>"
+E = "e = L − R"
 
 
 def swing(amp_deg, period, cycles, dt=0.005):

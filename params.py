@@ -80,9 +80,6 @@ class Style:
     chassis_edge: str = "#2A3340"
     wheel: str = "#1D1D1F"
     tread: str = "#6E6E73"
-    tcrt: str = "#232323"
-    emitter: str = "#5A7BFF"
-    receiver: str = "#4A4A4A"
 
 
 @dataclass(frozen=True)
