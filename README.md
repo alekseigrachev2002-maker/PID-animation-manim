@@ -3,9 +3,10 @@
 Решения и сюжет сцен: `docs/spec.md`. Замеры, которые ждёт модель: `docs/measurements.md`. Исходники робота: `assets/`.
 
 ```
-pip install numpy scipy matplotlib pytest
+pip install numpy scipy matplotlib pytest manim
 python -m pytest -q          # знак руления, e = 0 на центре, мёртвая зона датчиков
 python quicklook.py all      # картинки для подбора параметров → out/
+manim -pql scenes/s1_error.py Scene1   # сцена 1, черновик; -qh — 1080p
 ```
 
 - `params.py` — параметры (мм, с, ШИМ, АЦП); заглушки помечены.

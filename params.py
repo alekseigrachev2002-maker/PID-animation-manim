@@ -60,3 +60,39 @@ class Controller:
     balance: float = 1.0        # sensorBalance
     period: float = 0.005       # период регулятора, с
     pwm_limit: float = 255.0
+
+
+@dataclass(frozen=True)
+class Style:
+    font: str = "Inter"
+    L: str = "#4C8DF6"
+    R: str = "#F59E0B"
+    e: str = "#34D399"
+    D: str = "#E879F9"
+    graph_bg: str = "#0E1117"
+    field: str = "#EEECE5"
+    line: str = "#151515"
+    text: str = "#D7DCE5"
+    muted: str = "#8A94A6"
+    axis: str = "#3A3F48"
+    block: str = "#1A1F29"
+    chassis: str = "#3A4656"
+    chassis_edge: str = "#2A3340"
+    wheel: str = "#1D1D1F"
+    tread: str = "#6E6E73"
+    tcrt: str = "#232323"
+    emitter: str = "#5A7BFF"
+    receiver: str = "#4A4A4A"
+
+
+@dataclass(frozen=True)
+class Layout:
+    """Макет в пикселях эталонного кадра 1280×720 (начало — левый верхний угол)."""
+    width_px: float = 1280.0
+    px_per_mm: float = 2.2
+    graph_w_px: float = 853.0                 # левая панель графиков, 2/3 ширины
+    robot_px: tuple = (1066.5, 400.0)         # середина оси колёс на экране
+    plot_px: tuple = (84.0, 132.0, 809.0, 602.0)  # область графика: x0, y0, x1, y1
+    header_y_px: float = 46.0
+    legend_y_px: float = 688.0
+    margin_px: float = 24.0
