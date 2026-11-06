@@ -59,19 +59,28 @@ def backdrop(fr, st=Style()):
 # ---------- шапка ----------
 
 class Header(VGroup):
-    """Фраза этапа и один блок с текущей формулой."""
+    """Шапка: «Фраза этапа: пояснение шага» слева и блок с текущей формулой у правого края панели.
 
-    def __init__(self, fr, phrase, st=Style()):
+    Фраза меняется только на смене этапа, пояснение (4–6 слов) — на каждом шаге сцены.
+    """
+
+    def __init__(self, fr, phrase, caption, st=Style()):
         super().__init__()
         self.fr, self.st = fr, st
         self.phrase = self._phrase(phrase)
+        self.caption = self._caption(caption)
         self.block = None
-        self.add(self.phrase)
+        self.add(self.phrase, self.caption)
 
     def _phrase(self, s):
         m = self.fr.layout.margin_px
-        t = text(self.fr, s, 22, self.st.text, self.st, weight="SEMIBOLD")
+        t = text(self.fr, s + ":", 22, self.st.text, self.st, weight="SEMIBOLD")
         return t.move_to(self.fr.px(m, self.fr.layout.header_y_px), aligned_edge=LEFT).set_z_index(Z_UI)
+
+    def _caption(self, s):
+        t = text(self.fr, s, 22, self.st.muted, self.st)
+        t.next_to(self.phrase, RIGHT, buff=10 * self.fr.unit)
+        return t.align_to(self.phrase, DOWN).set_z_index(Z_UI)
 
     def _block(self, markup, color):
         fr, st = self.fr, self.st
@@ -79,23 +88,29 @@ class Header(VGroup):
         box = RoundedRectangle(corner_radius=8 * fr.unit, width=t.width + 40 * fr.unit, height=44 * fr.unit,
                                stroke_color=color, stroke_width=fr.stroke(2), fill_color=color, fill_opacity=0.14)
         g = VGroup(box, t.move_to(box))
-        g.next_to(self.phrase, RIGHT, buff=28 * fr.unit)
+        right = fr.layout.graph_w_px - fr.layout.margin_px
+        g.move_to(fr.px(right, fr.layout.header_y_px), aligned_edge=RIGHT)
         return g.set_z_index(Z_UI)
 
-    def set_formula(self, markup, color):
-        new = self._block(markup, color)
-        old, self.block = self.block, new
+    def _swap(self, attr, new):
+        old = getattr(self, attr)
+        setattr(self, attr, new)
         self.add(new)
         if old is None:
             return FadeIn(new, shift=0.1 * DOWN)
         self.remove(old)
         return FadeTransform(old, new)
 
-    def set_phrase(self, s):
-        new = self._phrase(s)
-        old, self.phrase = self.phrase, new
-        self.remove(old); self.add(new)
-        return FadeTransform(old, new)
+    def set_formula(self, markup, color):
+        return self._swap("block", self._block(markup, color))
+
+    def set_caption(self, s):
+        return self._swap("caption", self._caption(s))
+
+    def set_phrase(self, phrase, caption):
+        """Смена этапа: новая фраза и пояснение."""
+        anim = self._swap("phrase", self._phrase(phrase))
+        return [anim, self.set_caption(caption)]
 
 
 # ---------- легенда ----------

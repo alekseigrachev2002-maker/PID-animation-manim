@@ -11,7 +11,7 @@ import model  # noqa: E402
 import track  # noqa: E402
 from params import Sensor  # noqa: E402
 from scenes.base import PIDScene, render  # noqa: E402
-from visuals.panels import Plot, Header, legend, text  # noqa: E402
+from visuals.panels import Plot, Header, legend  # noqa: E402
 
 E = "e = L − R"
 
@@ -26,7 +26,6 @@ class Scene1(PIDScene):
     amp_deg = 18.0     # амплитуда качания
     period = 2.0       # период качания, с
     speed = 0.5        # проигрывание вдвое медленнее
-    captions = False   # подписи-субтитры
 
     def construct(self):
         fr, st = self.fr, self.st
@@ -46,7 +45,7 @@ class Scene1(PIDScene):
         dim = ValueTracker(1.0)
         cL = plot.curve(traj.tt, traj.L, st.L, self.t, dim)
         cR = plot.curve(traj.tt, traj.R, st.R, self.t, dim)
-        header = Header(fr, "Считаем ошибку", st)
+        header = Header(fr, "Считаем ошибку", "сигналы левого и правого датчиков", st)
         leg1 = legend(fr, [(st.L, "L — левый датчик, A0", 1), (st.R, "R — правый датчик, A1", 1)], st)
         self.add(plot.axes(ticks), *refs, header, leg1, cL, cR)
         self.wait(0.5)
@@ -60,17 +59,15 @@ class Scene1(PIDScene):
         leg2 = legend(fr, [(st.L, "L", 0.35), (st.R, "R", 0.35), (st.e, "e = L − R", 1)], st)
         self.play(dim.animate.set_value(0.35), prog.animate.set_value(1.0), plot.lo.animate.set_value(-1023),
                   ref_op.animate.set_value(0.0), FadeOut(leg1), FadeIn(leg2), header.set_formula(E, st.e),
+                  header.set_caption("разность сигналов"),
                   run_time=1.2)
         self.add(cE)
         self.play(e_end.animate.set_value(self.t.get_value()), run_time=1.5, rate_func=linear)
         e_end.set_value(1e9)
 
         # 3. ещё одно качание
+        self.play(header.set_caption("e = 0, пока оба на белом"), run_time=0.8)
         self.advance(2 * self.period)
-        if self.captions:
-            cap = text(fr, "плато e = 0: оба датчика на белом", 15, st.e, st)
-            cap.move_to(plot.to_screen([0.1], [-900])[0], aligned_edge=cap.get_left() - cap.get_center())
-            self.play(FadeIn(cap.set_z_index(13)))
         self.wait(1.5)
 
 
