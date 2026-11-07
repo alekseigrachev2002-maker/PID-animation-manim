@@ -28,6 +28,7 @@ RUNS = [
 
 
 class Scene2a(PIDScene):
+    runs = RUNS         # прогоны (kp, пояснение)
     psi0_deg = 15.0     # стартовый поворот относительно линии
     delay = 0.020       # задержка команда → колесо, с (заглушка до замеров)
     t_run = 2.0         # длительность прогона, с
@@ -43,7 +44,9 @@ class Scene2a(PIDScene):
         """Возврат перед следующим прогоном; возвращает стартовую позу следующего прогона."""
         x, y, psi = self.end_pose()
         psi0 = np.radians(self.psi0_deg)
-        if model.off_line(line, (x, y, psi), self.geom, self.sensor):
+        # робот всегда возвращается точно на центр линии: иначе поворот на 15° при смещении в мёртвой зоне
+        # может увести оба датчика по одну сторону, и прогон начнётся с потерянной линии
+        if model.off_line(line, (x, y, psi), self.geom, self.sensor) or abs(x) > 0.5:
             moved = model.move(line, (x, y, psi), (0.0, y, psi), self.t_slide, roll=False,
                                geom=self.geom, sensor=self.sensor)
             self.switch(moved)
@@ -59,19 +62,19 @@ class Scene2a(PIDScene):
         fr, st = self.fr, self.st
         line = track.straight(y1=20000)
         pose = (0.0, 0.0, np.radians(self.psi0_deg))
-        traj = self.run(line, pose, RUNS[0][0])
+        traj = self.run(line, pose, self.runs[0][0])
         leg = legend(fr, [(st.e, "e = L − R", 1)], st)
         readout = MotorReadout(fr, leg.get_right()[0] / fr.unit + fr.layout.width_px / 2 + 40,
                                model.wheel_signs(Motor()), st=st)
         self.bind(traj, line, readout=readout)
 
-        plot = Plot(fr, t_max=self.t_run, lo=-1023, hi=1023, st=st)
+        plot = Plot(fr, t_max=self.t_run * 1.12, lo=-1023, hi=1023, st=st)   # ось чуть длиннее прогона
         ticks = {v: (lambda lo, hi: 1) for v in (-1023, 0, 1023)}
-        header = Header(fr, "Подбираем P", RUNS[0][1], st)
+        header = Header(fr, "Подбираем P", self.runs[0][1], st)
         self.add(plot.axes(ticks, y_label="e", t_ticks=[0, 0.5, 1, 1.5, 2]), header, leg)
         self.play(header.set_formula(U_P, st.e), run_time=0.8)
 
-        for i, (kp, caption) in enumerate(RUNS):
+        for i, (kp, caption) in enumerate(self.runs):
             if i > 0:
                 pose = self.reset(line)
                 traj = self.run(line, pose, kp)
@@ -82,10 +85,10 @@ class Scene2a(PIDScene):
             self.wait(0.3)
             self.advance(traj.t[-1])
             self.wait(0.8)
-            if i < len(RUNS) - 1:
+            if i < len(self.runs) - 1:
                 # стоп: кривая гаснет, числа ШИМ приглушаются, в шапке — следующий прогон
                 self.play(FadeOut(curve), readout.opacity.animate.set_value(0.35),
-                          header.set_caption(RUNS[i + 1][1]), run_time=0.8)
+                          header.set_caption(self.runs[i + 1][1]), run_time=0.8)
         self.wait(1.0)
 
 

@@ -237,19 +237,19 @@ class Number(VGroup):
         self.cache = {}
 
     def _glyphs(self, k):
-        """Контуры символов числа k относительно правого края и низа последней цифры."""
+        """Контуры символов числа k относительно левого края и низа последней цифры."""
         if k not in self.cache:
             t = text(self.fr, str(k).replace("-", "−"), self.px, self.color, self.st)
-            ref = np.array([t.get_right()[0], t[-1].get_bottom()[1], 0.0])
+            ref = np.array([t.get_left()[0], t[-1].get_bottom()[1], 0.0])
             self.cache[k] = [g.get_points() - ref for g in t]
         return self.cache[k]
 
-    def set_value(self, v, right_base):
-        """right_base — точка: правый край числа и линия низа цифр."""
+    def set_value(self, v, left_base):
+        """left_base — точка: левый край числа и линия низа цифр."""
         glyphs = self._glyphs(int(round(v)))
         for j, slot in enumerate(self):
             if j < len(glyphs):
-                slot.set_points(glyphs[j] + right_base)
+                slot.set_points(glyphs[j] + left_base)
             else:
                 slot.clear_points()
         return self
@@ -259,10 +259,10 @@ class MotorReadout(VGroup):
     """ШИМ физических колёс в строке легенды: «▬ левый мотор 150 + kp·e = 255   ▬ правый мотор 150 − kp·e = 45».
 
     Полоска — цвет оси колеса на роботе. Знаки в формулах — из подключения моторов (model.wheel_signs).
-    Числа выровнены по правому краю поля фиксированной ширины, поэтому строка не дёргается.
+    Число стоит сразу после «=»; следующая группа отстоит на ширину самого длинного числа — строка не дёргается.
     opacity — ValueTracker: приглушать на время возврата между прогонами.
     """
-    NUM_W = 40   # ширина поля под число, px
+    NUM_W = 40   # место под самое длинное число («−255»), px
     PX = 15      # кегль строки, px
 
     def __init__(self, fr, x_px, signs, law="kp·e", st=Style()):
@@ -280,8 +280,9 @@ class MotorReadout(VGroup):
             frm = text(fr, formula, self.PX, st.muted, st).next_to(lab, RIGHT, buff=10 * fr.unit)
             base = lab[0].get_bottom()[1]          # низ первой буквы — без выносных элементов
             frm.shift((base - frm[0].get_bottom()[1]) * UP)
-            right = frm.get_right()[0] + (6 + self.NUM_W) * fr.unit
-            self.anchors.append(np.array([right, base, 0.0]))
+            left = frm.get_right()[0] + 6 * fr.unit
+            right = left + self.NUM_W * fr.unit
+            self.anchors.append(np.array([left, base, 0.0]))
             self.texts.add(VGroup(sw, lab, frm))
             self.numbers.add(Number(fr, self.PX, st.text, st))
             x = right / fr.unit + fr.layout.width_px / 2 + 32
