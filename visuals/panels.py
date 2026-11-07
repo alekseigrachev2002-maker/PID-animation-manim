@@ -256,29 +256,36 @@ class Number(VGroup):
 
 
 class MotorReadout(VGroup):
-    """ШИМ физических колёс в строке легенды: «левый мотор 255   правый мотор −53».
+    """ШИМ физических колёс в строке легенды: «▬ левый мотор 150 + kp·e = 255   ▬ правый мотор 150 − kp·e = 45».
 
+    Полоска — цвет оси колеса на роботе. Знаки в формулах — из подключения моторов (model.wheel_signs).
     Числа выровнены по правому краю поля фиксированной ширины, поэтому строка не дёргается.
     opacity — ValueTracker: приглушать на время возврата между прогонами.
     """
-    NUM_W = 48   # ширина поля под число, px
+    NUM_W = 40   # ширина поля под число, px
+    PX = 15      # кегль строки, px
 
-    def __init__(self, fr, x_px, st=Style()):
+    def __init__(self, fr, x_px, signs, law="kp·e", st=Style()):
         super().__init__()
         self.fr, self.st = fr, st
         self.opacity = ValueTracker(1.0)
         y = fr.layout.legend_y_px
-        self.labels, self.numbers, self.anchors = VGroup(), VGroup(), []
+        self.texts, self.numbers, self.anchors = VGroup(), VGroup(), []
         x = x_px
-        for name in ("левый мотор", "правый мотор"):
-            lab = text(fr, name, 16, st.muted, st).move_to(fr.px(x, y), aligned_edge=LEFT)
+        for name, sign, color in (("левый мотор", signs[0], st.L), ("правый мотор", signs[1], st.R)):
+            sw = Rectangle(width=14 * fr.unit, height=7 * fr.unit, stroke_width=0, fill_color=color,
+                           fill_opacity=1).move_to(fr.px(x + 7, y))
+            lab = text(fr, name, self.PX, st.text, st).next_to(sw, RIGHT, buff=8 * fr.unit)
+            formula = f"150 {'+' if sign > 0 else '−'} {law} ="
+            frm = text(fr, formula, self.PX, st.muted, st).next_to(lab, RIGHT, buff=10 * fr.unit)
             base = lab[0].get_bottom()[1]          # низ первой буквы — без выносных элементов
-            right = lab.get_right()[0] + (10 + self.NUM_W) * fr.unit
+            frm.shift((base - frm[0].get_bottom()[1]) * UP)
+            right = frm.get_right()[0] + (6 + self.NUM_W) * fr.unit
             self.anchors.append(np.array([right, base, 0.0]))
-            self.labels.add(lab)
-            self.numbers.add(Number(fr, 16, st.text, st))
-            x = (right / fr.unit) + fr.layout.width_px / 2 + 36
-        self.add(self.labels, self.numbers)
+            self.texts.add(VGroup(sw, lab, frm))
+            self.numbers.add(Number(fr, self.PX, st.text, st))
+            x = right / fr.unit + fr.layout.width_px / 2 + 32
+        self.add(self.texts, self.numbers)
         self.set_z_index(Z_UI)
         self.set_values(0.0, 0.0, 0.0)
 
@@ -287,6 +294,6 @@ class MotorReadout(VGroup):
         for num, anchor, v in zip(self.numbers, self.anchors, (pwm_l, pwm_r)):
             num.set_value(v, anchor)
         op = self.opacity.get_value()
-        self.labels.set_opacity(op)
+        self.texts.set_opacity(op)
         self.numbers.set_fill(opacity=op)
         return self

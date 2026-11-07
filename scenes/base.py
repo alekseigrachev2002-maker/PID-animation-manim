@@ -9,6 +9,8 @@ from manim import Scene, ValueTracker, linear, tempconfig  # noqa: E402
 
 import numpy as np  # noqa: E402
 
+import model  # noqa: E402
+
 from params import Geometry, Sensor, Style  # noqa: E402
 from visuals.panels import Frame, backdrop  # noqa: E402
 from visuals.robot import Robot  # noqa: E402
@@ -27,7 +29,7 @@ class PIDScene(Scene):
         """Робот и мир, которые следуют траектории self.traj по трекеру self.t; readout — индикатор ШИМ колёс."""
         self.traj = traj
         world = World(self.fr, track, st=self.st)
-        robot = Robot(self.fr, self.geom, self.st)
+        robot = Robot(self.fr, self.geom, self.st, self.sensor)
         xray = XRay(self.fr, track, self.geom, st=self.st) if self.st.xray else None
 
         self.s_off = np.zeros(2)   # перенос пути колёс между отрезками, чтобы протектор не прыгал
@@ -69,10 +71,11 @@ class PIDScene(Scene):
 
 
     def levels(self, traj, t):
-        """Показания L, R в момент t, нормированные: 0 — белое, 1 — чёрное."""
+        """Показания физических датчиков [левый, правый] в момент t, нормированные: 0 — белое, 1 — чёрное."""
         sig = traj.signals_at(t)
+        phys = np.array(model.to_channels(np.array([sig["L"], sig["R"]]), self.sensor))   # A0/A1 → левый/правый
         w, b = np.asarray(self.sensor.white, float), np.asarray(self.sensor.black, float)
-        return (np.array([sig["L"], sig["R"]]) - w) / (b - w)
+        return (phys - w) / (b - w)
 
     def advance(self, t_to, *extra, speed=None):
         """Проиграть траекторию до момента t_to (плюс одновременные анимации extra)."""

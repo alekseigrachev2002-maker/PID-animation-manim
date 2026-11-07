@@ -4,11 +4,11 @@ import math
 
 from manim import UL, WHITE, Arc, interpolate_color, ManimColor, Circle, Difference, Rectangle, RoundedRectangle, Union, VGroup, VMobject
 
-from params import Geometry, Style
+from params import Geometry, Sensor, Style
 
 HALO_R = (11.0, 8.0, 5.5)   # ореол метки: круги внахлёст, к краю свечение слабее
 N_TREAD = 18          # шевронов ёлочки по окружности колеса
-Z = dict(wheel=1, tread=2, board=3, chassis=4, marker=5)
+Z = dict(wheel=1, tread=2, axle=2.5, board=3, chassis=4, marker=5)
 
 
 def _rect(w, h, cx, cy, r=0.0, **kw):
@@ -36,10 +36,23 @@ def wheels(g: Geometry, st: Style):
                           stroke_width=0) for s in (-1, 1)])
 
 
-def boards(g: Geometry, st: Style):
+def board_colors(st: Style, sensor: Sensor):
+    """Цвета плат [левая, правая] = цвет сигнала, который с неё идёт (L на A0, R на A1)."""
+    return (st.R, st.L) if sensor.swapped else (st.L, st.R)
+
+
+def axles(g: Geometry, st: Style):
+    """Видимые оси: от края выреза в акриле до внутренней стороны колеса; цвет — сторона робота."""
+    x0 = g.cutout_x[0]
+    x1 = g.wheel_x - g.wheel_w / 2
+    return VGroup(*[_rect(x1 - x0, g.axle_w, s * (x0 + x1) / 2, 0, fill_color=c, fill_opacity=1, stroke_width=0)
+                    for s, c in ((-1, st.L), (1, st.R))])
+
+
+def boards(g: Geometry, st: Style, sensor: Sensor = Sensor()):
     front = g.mount_y + g.board_front_to_mount
     out = VGroup()
-    for s, color in ((-1, st.L), (1, st.R)):
+    for s, color in zip((-1, 1), board_colors(st, sensor)):
         board = _rect(g.board_w, g.board_len, s * g.sensor_x, front - g.board_len / 2, 0.8,
                       fill_color=color, fill_opacity=1, stroke_width=0)
         hole = Circle(radius=1.5, fill_color=st.field, fill_opacity=1, stroke_width=0).move_to(
@@ -48,10 +61,10 @@ def boards(g: Geometry, st: Style):
     return out
 
 
-def markers(g: Geometry, st: Style):
-    """Метки оптического центра на платах [L, R]: ореол цвета сигнала и ядро."""
+def markers(g: Geometry, st: Style, sensor: Sensor = Sensor()):
+    """Метки оптического центра на платах [левая, правая]: ореол цвета сигнала и ядро."""
     out = VGroup()
-    for s, color in ((-1, st.L), (1, st.R)):
+    for s, color in zip((-1, 1), board_colors(st, sensor)):
         c = [s * g.sensor_x, g.sensor_y, 0]
         halo = VGroup(*[Circle(radius=r, stroke_width=0).set_fill(color, 0).move_to(c) for r in HALO_R])
         core = Circle(radius=3.2, stroke_width=0).set_fill(marker_core(color, 0.0), 1).move_to(c)
@@ -86,14 +99,14 @@ def tread_points(g: Geometry, side, phase):
 class Robot(VGroup):
     """Робот на экране: середина оси колёс в fr.anchor. set_pose(psi), set_wheel_phase(sL, sR)."""
 
-    def __init__(self, fr, geom=Geometry(), st=Style()):
+    def __init__(self, fr, geom=Geometry(), st=Style(), sensor=Sensor()):
         super().__init__()
-        self.fr, self.geom, self.st = fr, geom, st
+        self.fr, self.geom, self.st, self.sensor = fr, geom, st, sensor
         self.psi = 0.0
         self.treads = VGroup(*[VMobject(stroke_color=st.tread) for _ in range(2 * N_TREAD)])
         # оптопара TCRT стоит на нижней стороне платы и сверху не видна — не рисуем
-        self.markers = markers(geom, st)
-        parts = dict(wheel=wheels(geom, st), tread=self.treads, board=boards(geom, st),
+        self.markers = markers(geom, st, sensor)
+        parts = dict(wheel=wheels(geom, st), tread=self.treads, axle=axles(geom, st), board=boards(geom, st, sensor),
                      chassis=chassis(geom, st, fr.stroke(1.2)), marker=self.markers)
         self.body = parts["chassis"][0]
         self.glare = parts["chassis"][1] if len(parts["chassis"]) > 1 else None
@@ -118,9 +131,9 @@ class Robot(VGroup):
         self.psi = psi
         return self
 
-    def set_signals(self, lvL, lvR):
-        """Яркость меток датчиков: 0 — белое под датчиком, 1 — чёрное."""
-        for (halo, core), lv, color in zip(self.markers, (lvL, lvR), (self.st.L, self.st.R)):
+    def set_signals(self, lv_left, lv_right):
+        """Яркость меток физических датчиков [левый, правый]: 0 — белое под датчиком, 1 — чёрное."""
+        for (halo, core), lv, color in zip(self.markers, (lv_left, lv_right), board_colors(self.st, self.sensor)):
             lv = float(np.clip(lv, 0, 1))
             for ring in halo:
                 ring.set_fill(opacity=self.st.glow * lv / 2)

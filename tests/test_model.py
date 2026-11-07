@@ -114,3 +114,27 @@ def test_move_without_roll_keeps_wheels():
     tr = model.move(LINE, (-100.0, 50.0, 0.3), (0.0, 50.0, 0.3), 1.0, roll=False)
     assert tr.x[0] == pytest.approx(-100) and tr.x[-1] == pytest.approx(0)
     assert np.all(tr.sL == 0) and np.all(tr.sR == 0)
+
+
+@pytest.mark.parametrize("s_swap, m_swap, toward", [(False, True, True), (True, False, True),
+                                                   (False, False, False), (True, True, False)])
+def test_wiring_combinations(s_swap, m_swap, toward):
+    """Белое выше: робот рулит к линии, только если переставлено ровно одно — датчики или моторы."""
+    traj = model.simulate(LINE, (0.0, 0.0, np.radians(12)), t_end=0.1,
+                          sensor=Sensor(swapped=s_swap), motor=Motor(swapped=m_swap))
+    assert (traj.psi[-1] < traj.psi[0]) == toward
+
+
+def test_channels_roundtrip():
+    phys = np.array([300.0, 700.0])
+    a0, a1 = model.to_channels(phys, Sensor(swapped=True))
+    assert (a0, a1) == (700.0, 300.0)
+    assert tuple(model.to_channels(np.array([a0, a1]), Sensor(swapped=True))) == (300.0, 700.0)
+
+
+def test_wheel_signs_match_pwm():
+    for sw in (False, True):
+        m = Motor(swapped=sw)
+        sl, sr = model.wheel_signs(m)
+        pl, pr = model.wheel_pwm(40.0, C, m)
+        assert (pl, pr) == (C.speed + sl * 40.0, C.speed + sr * 40.0)

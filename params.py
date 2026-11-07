@@ -22,6 +22,7 @@ class Geometry:
     board_len: float = 40.0
     board_w: float = 10.0
     board_front_to_mount: float = 31.5  # от переднего края платы до крепёжного отверстия
+    axle_w: float = 10.0                # видимая ось: толщина, в зазоре между акрилом и колесом
 
     @property
     def track_width(self) -> float:
@@ -31,8 +32,9 @@ class Geometry:
 @dataclass(frozen=True)
 class Sensor:
     sigma: float = 2.5          # радиус гауссова пятна, мм
-    white: tuple = (860, 860)   # АЦП на белом, (L, R) — заглушка; белое выше (схема: фототранзистор вверху, pull-down)
-    black: tuple = (120, 120)   # АЦП на чёрном, (L, R) — заглушка
+    white: tuple = (860, 860)   # АЦП на белом, (левый, правый) физически — заглушка; белое выше (схема: pull-down)
+    black: tuple = (120, 120)   # АЦП на чёрном, (левый, правый) физически — заглушка
+    swapped: bool = False       # A0 (L в коде) подключён к физически ПРАВОМУ датчику — до теста 0
     noise: float = 0.0          # СКО шума АЦП
     line_width: float = 10.0
 

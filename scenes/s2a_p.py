@@ -61,7 +61,8 @@ class Scene2a(PIDScene):
         pose = (0.0, 0.0, np.radians(self.psi0_deg))
         traj = self.run(line, pose, RUNS[0][0])
         leg = legend(fr, [(st.e, "e = L − R", 1)], st)
-        readout = MotorReadout(fr, leg.get_right()[0] / fr.unit + fr.layout.width_px / 2 + 48, st)
+        readout = MotorReadout(fr, leg.get_right()[0] / fr.unit + fr.layout.width_px / 2 + 40,
+                               model.wheel_signs(Motor()), st=st)
         self.bind(traj, line, readout=readout)
 
         plot = Plot(fr, t_max=self.t_run, lo=-1023, hi=1023, st=st)

@@ -60,7 +60,19 @@ def adc(cov, sensor: Sensor, rng=None):
 
 
 def read_sensors(track, pose, geom, sensor, rng=None):
+    """Показания физических датчиков [левый, правый]."""
     return adc(coverage(track, sensor_points(pose, geom), sensor), sensor, rng)
+
+
+def to_channels(phys, sensor: Sensor):
+    """Физические [левый, правый] → то, что видит код: (A0 = L, A1 = R). Обратное преобразование то же."""
+    left, right = phys[..., 0], phys[..., 1]
+    return (right, left) if sensor.swapped else (left, right)
+
+
+def channel_sides(sensor: Sensor):
+    """Какой физический датчик стоит на A0 и на A1."""
+    return ("правый", "левый") if sensor.swapped else ("левый", "правый")
 
 
 # ---------- регулятор (порт followLine) ----------
@@ -78,6 +90,11 @@ def motor_pwm(u, ctrl: Controller):
     """motors(speed − u, speed + u) с constrain ±255 → (speed1 на IN1/IN2, speed2 на IN3/IN4)."""
     lim = ctrl.pwm_limit
     return np.clip(ctrl.speed - u, -lim, lim), np.clip(ctrl.speed + u, -lim, lim)
+
+
+def wheel_signs(motor: Motor):
+    """Знаки u в скорости физических колёс: ШИМ левого = speed + sL·u, правого = speed + sR·u."""
+    return (1, -1) if motor.swapped else (-1, 1)
 
 
 def wheel_pwm(u, ctrl: Controller, motor: Motor):
@@ -185,7 +202,7 @@ def simulate(track, pose0, ctrl=Controller(), t_end=5.0, geom=Geometry(), sensor
     lag = deque([(ctrl.speed, ctrl.speed)] * int(round(motor.delay / ctrl.period)))
     for k in range(n_ticks):
         t0 = k * ctrl.period
-        L, R = read_sensors(track, s[:3], geom, sensor, rng)
+        L, R = to_channels(read_sensors(track, s[:3], geom, sensor, rng), sensor)
         e = error(L, R, ctrl)
         e_old = e if e_old is None else e_old   # без рывка D на первом тике
         uP, uD = control_parts(e, e_old, ctrl)
@@ -239,7 +256,8 @@ def prescribed(track, t, x, y, psi, geom=Geometry(), sensor=Sensor(), ctrl=Contr
     """Движение, заданное руками (сцена 1): датчики через ту же функцию, регулятор не действует."""
     rng = np.random.default_rng(seed)
     t, x, y, psi = (np.broadcast_to(np.asarray(a, float), np.shape(t)).copy() for a in (t, x, y, psi))
-    LR = np.array([read_sensors(track, p, geom, sensor, rng) for p in zip(x, y, psi)])
+    phys = np.array([read_sensors(track, p, geom, sensor, rng) for p in zip(x, y, psi)])
+    LR = np.column_stack(to_channels(phys, sensor))
     e = error(LR[:, 0], LR[:, 1], ctrl)
     # путь колёс: смещение по траектории ± поворот вокруг оси
     ds = np.concatenate([[0], np.cumsum(np.hypot(np.diff(x), np.diff(y)))])

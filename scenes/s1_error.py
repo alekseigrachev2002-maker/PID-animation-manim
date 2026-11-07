@@ -46,7 +46,8 @@ class Scene1(PIDScene):
         cL = plot.curve(traj.tt, traj.L, st.L, self.t, dim)
         cR = plot.curve(traj.tt, traj.R, st.R, self.t, dim)
         header = Header(fr, "Считаем ошибку", "сигналы левого и правого датчиков", st)
-        leg1 = legend(fr, [(st.L, "L — левый датчик, A0", 1), (st.R, "R — правый датчик, A1", 1)], st)
+        a0, a1 = model.channel_sides(self.sensor)
+        leg1 = legend(fr, [(st.L, f"L — {a0} датчик, A0", 1), (st.R, f"R — {a1} датчик, A1", 1)], st)
         self.add(plot.axes(ticks), *refs, header, leg1, cL, cR)
         self.wait(0.5)
 
