@@ -17,7 +17,7 @@ from params import Controller, Motor  # noqa: E402
 from scenes.base import PIDScene, render  # noqa: E402
 from visuals.panels import Header, MotorReadout, Plot, legend  # noqa: E402
 
-U_P = "u = kp·e"
+U_P = "control = kp·err"
 
 # (kp, пояснение в шапке) — в порядке показа
 RUNS = [
@@ -63,7 +63,7 @@ class Scene2a(PIDScene):
         line = track.straight(y1=20000)
         pose = (0.0, 0.0, np.radians(self.psi0_deg))
         traj = self.run(line, pose, self.runs[0][0])
-        leg = legend(fr, [(st.e, "e = L − R", 1)], st)
+        leg = legend(fr, [(st.e, "err = L − R", 1)], st)
         readout = MotorReadout(fr, leg.get_right()[0] / fr.unit + fr.layout.width_px / 2 + 40,
                                model.wheel_signs(Motor()), st=st)
         self.bind(traj, line, readout=readout)
@@ -71,7 +71,7 @@ class Scene2a(PIDScene):
         plot = Plot(fr, t_max=self.t_run * 1.12, lo=-1023, hi=1023, st=st)   # ось чуть длиннее прогона
         ticks = {v: (lambda lo, hi: 1) for v in (-1023, 0, 1023)}
         header = Header(fr, "Подбираем P", self.runs[0][1], st)
-        self.add(plot.axes(ticks, y_label="e", t_ticks=[0, 0.5, 1, 1.5, 2]), header, leg)
+        self.add(plot.axes(ticks, y_label="err", t_ticks=[0, 0.5, 1, 1.5, 2]), header, leg)
         self.play(header.set_formula(U_P, st.e), run_time=0.8)
 
         for i, (kp, caption) in enumerate(self.runs):

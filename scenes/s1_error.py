@@ -1,4 +1,4 @@
-"""Сцена 1. Поворот на месте над прямой: L и R → появляется e = L − R, видно плато e = 0."""
+"""Сцена 1. Поворот на месте над прямой: L и R → появляется err = L − R, видно плато err = 0."""
 import sys
 from pathlib import Path
 
@@ -13,7 +13,7 @@ from params import Sensor  # noqa: E402
 from scenes.base import PIDScene, render  # noqa: E402
 from visuals.panels import Plot, Header, legend, swap  # noqa: E402
 
-E = "e = L − R"
+E = "err = L − R"
 
 
 def swing(amp_deg, period, cycles, dt=0.005):
@@ -57,7 +57,7 @@ class Scene1(PIDScene):
         # 2. L, R бледнеют, шкала ±1023, появляется e
         e_end = ValueTracker(0.0)
         cE = plot.curve(traj.tt, traj.e, st.e, lambda: min(e_end.get_value(), self.t.get_value()), width_px=3)
-        leg2 = legend(fr, [(st.L, "L", 0.35), (st.R, "R", 0.35), (st.e, "e = L − R", 1)], st)
+        leg2 = legend(fr, [(st.L, "L", 0.35), (st.R, "R", 0.35), (st.e, "err = L − R", 1)], st)
         self.play(dim.animate.set_value(0.35), prog.animate.set_value(1.0), plot.lo.animate.set_value(-1023),
                   ref_op.animate.set_value(0.0), swap(leg1, leg2), header.set_formula(E, st.e),
                   header.set_caption("разность сигналов"),
@@ -67,7 +67,7 @@ class Scene1(PIDScene):
         e_end.set_value(1e9)
 
         # 3. ещё одно качание
-        self.play(header.set_caption("e = 0, пока оба на белом"), run_time=0.8)
+        self.play(header.set_caption("err = 0, пока оба на белом"), run_time=0.8)
         self.advance(2 * self.period)
         self.wait(1.5)
 

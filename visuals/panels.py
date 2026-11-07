@@ -1,6 +1,6 @@
 """Макет кадра: фон, шапка, легенда, график. Перевод мм и пикселей в единицы Manim — только здесь (Frame)."""
 import numpy as np
-from manim import (DOWN, LEFT, RIGHT, UP, DashedLine, Dot, Line, MarkupText, Rectangle, RoundedRectangle,
+from manim import (DOWN, LEFT, RIGHT, UP, DashedLine, Dot, Line, Rectangle, RoundedRectangle,
                    Text, ValueTracker, VGroup, VMobject, config, FadeIn, FadeOut, Succession)
 
 from params import Layout, Style
@@ -44,7 +44,28 @@ class Frame:
 
 
 def text(fr, s, px, color, st=Style(), **kw):
-    return Text(s, font=st.font, font_size=fr.font(px), color=color, **kw)
+    """Текст шрифтом стиля; знак умножения «·» опущен на середину строчных букв (в Inter он стоит выше)."""
+    t = Text(s, font=st.font, font_size=fr.font(px), color=color, **kw)
+    glyphs = s.replace(" ", "")
+    if "·" in glyphs and len(glyphs) == len(t):
+        dy = _dot_lift(st.font, fr.font(px), kw.get("weight", "NORMAL"))
+        for i, ch in enumerate(glyphs):
+            if ch == "·":
+                t[i].shift(dy * DOWN)
+    return t
+
+
+_DOT_LIFT = {}
+
+
+def _dot_lift(font, size, weight):
+    """На сколько центр «·» выше середины строчной «e» при этом шрифте и кегле."""
+    key = (font, size, weight)
+    if key not in _DOT_LIFT:
+        ref = Text("e·e", font=font, font_size=size, weight=weight)
+        e, dot = ref[0], ref[1]
+        _DOT_LIFT[key] = dot.get_center()[1] - (e.get_bottom()[1] + e.height / 2)
+    return _DOT_LIFT[key]
 
 
 def backdrop(fr, st=Style()):
@@ -84,7 +105,7 @@ class Header(VGroup):
 
     def _block(self, markup, color):
         fr, st = self.fr, self.st
-        t = MarkupText(markup, font=st.font, font_size=fr.font(20), color=st.text)
+        t = text(fr, markup, 20, st.text, st)
         box = RoundedRectangle(corner_radius=8 * fr.unit, width=t.width + 40 * fr.unit, height=44 * fr.unit,
                                stroke_color=color, stroke_width=fr.stroke(2), fill_color=color, fill_opacity=0.14)
         g = VGroup(box, t.move_to(box))
@@ -256,7 +277,7 @@ class Number(VGroup):
 
 
 class MotorReadout(VGroup):
-    """ШИМ физических колёс в строке легенды: «▬ левый мотор 150 + kp·e = 255   ▬ правый мотор 150 − kp·e = 45».
+    """ШИМ физических колёс в строке легенды: «▬ левый мотор 150 + kp·err = 255   ▬ правый мотор 150 − kp·err = 45».
 
     Полоска — цвет оси колеса на роботе. Знаки в формулах — из подключения моторов (model.wheel_signs).
     Число стоит сразу после «=»; следующая группа отстоит на ширину самого длинного числа — строка не дёргается.
@@ -265,7 +286,7 @@ class MotorReadout(VGroup):
     NUM_W = 40   # место под самое длинное число («−255»), px
     PX = 15      # кегль строки, px
 
-    def __init__(self, fr, x_px, signs, law="kp·e", st=Style()):
+    def __init__(self, fr, x_px, signs, law="kp·err", st=Style()):
         super().__init__()
         self.fr, self.st = fr, st
         self.opacity = ValueTracker(1.0)
