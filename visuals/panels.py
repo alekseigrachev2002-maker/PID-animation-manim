@@ -219,3 +219,74 @@ class Plot:
         g = VGroup(line, dot).add_updater(upd)
         upd(g)
         return g.set_z_index(Z_UI + 1)
+
+
+# ---------- числа ШИМ в строке легенды ----------
+
+class Number(VGroup):
+    """Целое число из фиксированных слотов под символы, выровненное по правому краю.
+
+    Состав объектов не меняется от кадра к кадру: Manim собирает список объектов в начале анимации,
+    и подмена текстовых объектов на лету оставляла бы устаревшие копии.
+    """
+    SLOTS = 4   # знак и три цифры
+
+    def __init__(self, fr, px, color, st=Style()):
+        super().__init__(*[VMobject(fill_color=color, fill_opacity=1, stroke_width=0) for _ in range(self.SLOTS)])
+        self.fr, self.px, self.color, self.st = fr, px, color, st
+        self.cache = {}
+
+    def _glyphs(self, k):
+        """Контуры символов числа k относительно правого края и низа последней цифры."""
+        if k not in self.cache:
+            t = text(self.fr, str(k).replace("-", "−"), self.px, self.color, self.st)
+            ref = np.array([t.get_right()[0], t[-1].get_bottom()[1], 0.0])
+            self.cache[k] = [g.get_points() - ref for g in t]
+        return self.cache[k]
+
+    def set_value(self, v, right_base):
+        """right_base — точка: правый край числа и линия низа цифр."""
+        glyphs = self._glyphs(int(round(v)))
+        for j, slot in enumerate(self):
+            if j < len(glyphs):
+                slot.set_points(glyphs[j] + right_base)
+            else:
+                slot.clear_points()
+        return self
+
+
+class MotorReadout(VGroup):
+    """ШИМ физических колёс в строке легенды: «левый мотор 255   правый мотор −53».
+
+    Числа выровнены по правому краю поля фиксированной ширины, поэтому строка не дёргается.
+    opacity — ValueTracker: приглушать на время возврата между прогонами.
+    """
+    NUM_W = 48   # ширина поля под число, px
+
+    def __init__(self, fr, x_px, st=Style()):
+        super().__init__()
+        self.fr, self.st = fr, st
+        self.opacity = ValueTracker(1.0)
+        y = fr.layout.legend_y_px
+        self.labels, self.numbers, self.anchors = VGroup(), VGroup(), []
+        x = x_px
+        for name in ("левый мотор", "правый мотор"):
+            lab = text(fr, name, 16, st.muted, st).move_to(fr.px(x, y), aligned_edge=LEFT)
+            base = lab[0].get_bottom()[1]          # низ первой буквы — без выносных элементов
+            right = lab.get_right()[0] + (10 + self.NUM_W) * fr.unit
+            self.anchors.append(np.array([right, base, 0.0]))
+            self.labels.add(lab)
+            self.numbers.add(Number(fr, 16, st.text, st))
+            x = (right / fr.unit) + fr.layout.width_px / 2 + 36
+        self.add(self.labels, self.numbers)
+        self.set_z_index(Z_UI)
+        self.set_values(0.0, 0.0, 0.0)
+
+    def set_values(self, psi, pwm_l, pwm_r):
+        """psi не нужен — интерфейс общий с прочими индикаторами робота."""
+        for num, anchor, v in zip(self.numbers, self.anchors, (pwm_l, pwm_r)):
+            num.set_value(v, anchor)
+        op = self.opacity.get_value()
+        self.labels.set_opacity(op)
+        self.numbers.set_fill(opacity=op)
+        return self

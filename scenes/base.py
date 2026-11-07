@@ -5,13 +5,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from manim import AnimationGroup, FadeIn, FadeOut, Scene, ValueTracker, linear, tempconfig  # noqa: E402
+from manim import Scene, ValueTracker, linear, tempconfig  # noqa: E402
 
 import numpy as np  # noqa: E402
 
 from params import Geometry, Sensor, Style  # noqa: E402
 from visuals.panels import Frame, backdrop  # noqa: E402
-from visuals.robot import PwmLabels, Robot  # noqa: E402
+from visuals.robot import Robot  # noqa: E402
 from visuals.world import World, XRay  # noqa: E402
 
 
@@ -23,13 +23,12 @@ class PIDScene(Scene):
         self.t = ValueTracker(0.0)
         self.add(backdrop(self.fr, self.st))
 
-    def bind(self, traj, track, pwm=False):
-        """Робот и мир, которые следуют траектории self.traj по трекеру self.t; pwm — числа ШИМ у колёс."""
+    def bind(self, traj, track, readout=None):
+        """Робот и мир, которые следуют траектории self.traj по трекеру self.t; readout — индикатор ШИМ колёс."""
         self.traj = traj
         world = World(self.fr, track, st=self.st)
         robot = Robot(self.fr, self.geom, self.st)
         xray = XRay(self.fr, track, self.geom, st=self.st) if self.st.xray else None
-        labels = PwmLabels(self.fr, self.st) if pwm else None
 
         self.s_off = np.zeros(2)   # перенос пути колёс между отрезками, чтобы протектор не прыгал
 
@@ -42,18 +41,18 @@ class PIDScene(Scene):
             world.set_robot_xy(p["x"], p["y"])
             if xray is not None:
                 xray.set_pose(p["x"], p["y"], p["psi"])
-            if labels is not None:
+            if readout is not None:
                 sig = tr.signals_at(t)
-                labels.set_values(p["psi"], sig["pwmL"], sig["pwmR"])
+                readout.set_values(p["psi"], sig["pwmL"], sig["pwmR"])
 
         robot.add_updater(follow)
         follow(robot)
-        movers = [m for m in (world, xray, labels) if m is not None]
+        movers = [m for m in (world, xray, readout) if m is not None]
         for m in movers:
             # их двигает апдейтер робота; пустой апдейтер говорит Manim перерисовывать их каждый кадр
             m.add_updater(lambda m: None)
         self.add(robot, *movers)
-        self.robot, self.world, self.labels = robot, world, labels
+        self.robot, self.world, self.readout = robot, world, readout
         return robot, world
 
     def switch(self, traj, t=0.0):
@@ -68,15 +67,6 @@ class PIDScene(Scene):
         p = self.traj.at(self.t.get_value())
         return p["x"], p["y"], p["psi"]
 
-    def robot_parts(self):
-        return [m for m in (self.robot, self.labels) if m is not None]
-
-    def hide_robot(self):
-        """Робот (и числа ШИМ) гаснет — перед перестановкой на старт."""
-        return AnimationGroup(*[FadeOut(m) for m in self.robot_parts()])
-
-    def show_robot(self):
-        return AnimationGroup(*[FadeIn(m) for m in self.robot_parts()])
 
     def levels(self, traj, t):
         """Показания L, R в момент t, нормированные: 0 — белое, 1 — чёрное."""

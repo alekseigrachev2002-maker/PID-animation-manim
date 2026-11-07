@@ -5,11 +5,10 @@ import math
 from manim import UL, WHITE, Arc, interpolate_color, ManimColor, Circle, Difference, Rectangle, RoundedRectangle, Union, VGroup, VMobject
 
 from params import Geometry, Style
-from visuals.panels import text
 
 HALO_R = (11.0, 8.0, 5.5)   # ореол метки: круги внахлёст, к краю свечение слабее
 N_TREAD = 18          # шевронов ёлочки по окружности колеса
-Z = dict(wheel=1, tread=2, board=3, chassis=4, marker=5, label=6)
+Z = dict(wheel=1, tread=2, board=3, chassis=4, marker=5)
 
 
 def _rect(w, h, cx, cy, r=0.0, **kw):
@@ -138,50 +137,4 @@ class Robot(VGroup):
                 m.set_points_as_corners(self._to_screen(pts))
                 m.set_stroke(width=self.fr.stroke_mm(1.6) * vis, opacity=0.9 if vis > 0 else 0)
                 i += 1
-        return self
-
-
-class PwmLabels(VGroup):
-    """Числа ШИМ у левого и правого колеса. Ярлыки ездят с колёсами, текст всегда прямо.
-
-    Число собирается из фиксированных слотов под символы: состав объектов не меняется от кадра к кадру,
-    иначе Manim рисует устаревшие копии (список объектов он собирает в начале анимации).
-    """
-    SLOTS = 4   # знак и три цифры
-
-    def __init__(self, fr, st=Style(), x_mm=108.0):
-        super().__init__()
-        self.fr, self.st, self.x_mm = fr, st, x_mm
-        self.cache = {}
-        self.pills = VGroup(*[RoundedRectangle(corner_radius=6 * fr.unit, width=56 * fr.unit, height=28 * fr.unit,
-                                               stroke_width=0, fill_color=st.block, fill_opacity=0.92)
-                              for _ in range(2)])
-        self.slots = VGroup(*[VGroup(*[VMobject(fill_color=st.text, fill_opacity=1, stroke_width=0)
-                                       for _ in range(self.SLOTS)]) for _ in range(2)])
-        self.add(self.pills, self.slots)
-        self.set_z_index(Z["label"])
-        self.slots.set_z_index(Z["label"] + 1)
-        self.set_values(0.0, 0.0, 0.0)
-
-    def _glyphs(self, v):
-        """Контуры символов числа v относительно его центра (кэш по значению)."""
-        k = int(round(v))
-        if k not in self.cache:
-            t = text(self.fr, str(k).replace("-", "−"), 16, self.st.text, self.st)
-            c = t.get_center()
-            self.cache[k] = [g.get_points() - c for g in t]
-        return self.cache[k]
-
-    def set_values(self, psi, pwm_l, pwm_r):
-        c, s = np.cos(psi), np.sin(psi)
-        for i, (side, v) in enumerate(((-1, pwm_l), (1, pwm_r))):
-            x = side * self.x_mm
-            pos = self.fr.anchor + np.array([c * x, s * x, 0]) * self.fr.mm
-            self.pills[i].move_to(pos)
-            glyphs = self._glyphs(v)
-            for j, slot in enumerate(self.slots[i]):
-                if j < len(glyphs):
-                    slot.set_points(glyphs[j] + pos)
-                else:
-                    slot.clear_points()
         return self
