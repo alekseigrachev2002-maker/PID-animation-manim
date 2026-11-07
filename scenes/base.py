@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from manim import Scene, ValueTracker, linear, tempconfig  # noqa: E402
+from manim import AnimationGroup, FadeIn, FadeOut, Scene, ValueTracker, linear, tempconfig  # noqa: E402
 
 import numpy as np  # noqa: E402
 
@@ -50,12 +50,24 @@ class PIDScene(Scene):
             # их двигает апдейтер робота; пустой апдейтер говорит Manim перерисовывать их каждый кадр
             m.add_updater(lambda m: None)
         self.add(robot, *movers)
+        self.robot, self.world, self.labels = robot, world, labels
         return robot, world
 
     def switch(self, traj, t=0.0):
         """Подменить проигрываемую траекторию (новый прогон)."""
         self.traj = traj
         self.t.set_value(t)
+        self.robot.update(0)
+
+    def robot_parts(self):
+        return [m for m in (self.robot, self.labels) if m is not None]
+
+    def hide_robot(self):
+        """Робот (и числа ШИМ) гаснет — перед перестановкой на старт."""
+        return AnimationGroup(*[FadeOut(m) for m in self.robot_parts()])
+
+    def show_robot(self):
+        return AnimationGroup(*[FadeIn(m) for m in self.robot_parts()])
 
     def levels(self, traj, t):
         """Показания L, R в момент t, нормированные: 0 — белое, 1 — чёрное."""
