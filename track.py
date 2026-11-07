@@ -21,17 +21,31 @@ class Line:
         self.points = np.asarray(self.points, dtype=float)
         self._tree = cKDTree(self.points)
 
-    def distance(self, p) -> np.ndarray:
-        """Расстояние от точек p (..., 2) до осевой: ближайшая вершина + проекция на соседние отрезки."""
-        p = np.asarray(p, dtype=float)
-        flat = p.reshape(-1, 2)
+    def _nearest(self, flat):
+        """Ближайший отрезок осевой для каждой точки: (начало, конец, расстояние)."""
         _, i = self._tree.query(flat)
         n = len(self.points)
         prev = (i - 1) % n if self.closed else np.maximum(i - 1, 0)
         nxt = (i + 1) % n if self.closed else np.minimum(i + 1, n - 1)
-        d = np.minimum(_seg_dist(flat, self.points[prev], self.points[i]),
-                       _seg_dist(flat, self.points[i], self.points[nxt]))
-        return d.reshape(p.shape[:-1])
+        d1 = _seg_dist(flat, self.points[prev], self.points[i])
+        d2 = _seg_dist(flat, self.points[i], self.points[nxt])
+        first = d1 <= d2
+        a = np.where(first[:, None], self.points[prev], self.points[i])
+        b = np.where(first[:, None], self.points[i], self.points[nxt])
+        return a, b, np.minimum(d1, d2)
+
+    def distance(self, p) -> np.ndarray:
+        """Расстояние от точек p (..., 2) до осевой: ближайшая вершина + проекция на соседние отрезки."""
+        p = np.asarray(p, dtype=float)
+        return self._nearest(p.reshape(-1, 2))[2].reshape(p.shape[:-1])
+
+    def side(self, p) -> np.ndarray:
+        """С какой стороны осевой лежат точки: +1 слева по ходу линии, −1 справа."""
+        p = np.asarray(p, dtype=float)
+        flat = p.reshape(-1, 2)
+        a, b, _ = self._nearest(flat)
+        ab, ap = b - a, flat - a
+        return np.sign(ab[:, 0] * ap[:, 1] - ab[:, 1] * ap[:, 0]).reshape(p.shape[:-1])
 
 
 def _seg_dist(p, a, b):

@@ -208,6 +208,33 @@ def simulate(track, pose0, ctrl=Controller(), t_end=5.0, geom=Geometry(), sensor
     return _pack(np.hstack(cont), np.array(ticks), lost_at)
 
 
+def off_line(track, pose, geom=Geometry(), sensor=Sensor(), seen=0.02):
+    """Робот потерял линию: ни один датчик её не видит и оба лежат по одну сторону от неё."""
+    pts = sensor_points(pose, geom)
+    if coverage(track, pts, sensor).max() > seen:
+        return False
+    return all(ln.side(pts)[0] == ln.side(pts)[1] for ln in track.lines)
+
+
+def smoothstep(s):
+    s = np.clip(s, 0, 1)
+    return s * s * (3 - 2 * s)
+
+
+def move(track, pose_a, pose_b, duration, roll=True, dt=0.005, geom=Geometry(), sensor=Sensor()):
+    """Плавный переход позы a → b за duration (возврат между прогонами). roll=False — колёса не крутятся
+    (робота переставили / линия подъехала)."""
+    t = np.arange(0, duration + dt / 2, dt)
+    s = smoothstep(t / duration)
+    a, b = np.asarray(pose_a, float), np.asarray(pose_b, float)
+    x, y, psi = (a[k] + (b[k] - a[k]) * s for k in range(3))
+    traj = prescribed(track, t, x, y, psi, geom, sensor)
+    if not roll:
+        traj.sL[:] = 0.0
+        traj.sR[:] = 0.0
+    return traj
+
+
 def prescribed(track, t, x, y, psi, geom=Geometry(), sensor=Sensor(), ctrl=Controller(), seed=0):
     """Движение, заданное руками (сцена 1): датчики через ту же функцию, регулятор не действует."""
     rng = np.random.default_rng(seed)

@@ -31,10 +31,13 @@ class PIDScene(Scene):
         xray = XRay(self.fr, track, self.geom, st=self.st) if self.st.xray else None
         labels = PwmLabels(self.fr, self.st) if pwm else None
 
+        self.s_off = np.zeros(2)   # перенос пути колёс между отрезками, чтобы протектор не прыгал
+
         def follow(m):
             tr, t = self.traj, self.t.get_value()
             p = tr.at(t)
-            robot.set_pose(p["psi"]).set_wheel_phase(p["sL"], p["sR"])
+            self.wheel_s = np.array([p["sL"], p["sR"]]) + self.s_off
+            robot.set_pose(p["psi"]).set_wheel_phase(*self.wheel_s)
             robot.set_signals(*self.levels(tr, t))
             world.set_robot_xy(p["x"], p["y"])
             if xray is not None:
@@ -54,10 +57,16 @@ class PIDScene(Scene):
         return robot, world
 
     def switch(self, traj, t=0.0):
-        """Подменить проигрываемую траекторию (новый прогон)."""
+        """Подменить проигрываемую траекторию (новый прогон или переход); путь колёс продолжается."""
+        p = traj.at(t)
+        self.s_off = self.wheel_s - np.array([p["sL"], p["sR"]])
         self.traj = traj
         self.t.set_value(t)
         self.robot.update(0)
+
+    def end_pose(self):
+        p = self.traj.at(self.t.get_value())
+        return p["x"], p["y"], p["psi"]
 
     def robot_parts(self):
         return [m for m in (self.robot, self.labels) if m is not None]
