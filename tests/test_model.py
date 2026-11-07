@@ -19,7 +19,7 @@ def e_at(x=0.0, psi_deg=0.0):
 
 
 def pwm_at(x=0.0, psi_deg=0.0):
-    return model.motor_pwm(C.kp * e_at(x, psi_deg), C)
+    return model.wheel_pwm(C.kp * e_at(x, psi_deg), C, Motor())
 
 
 def test_centered_error_zero():
@@ -81,3 +81,19 @@ def test_delay_queue():
     out = [model.delayed(lag, (k, k)) for k in (1, 2, 3)]
     assert out == [(0, 0), (0, 0), (1, 1)]
     assert model.delayed(deque(), (5, 5)) == (5, 5)
+
+
+def test_unswapped_wiring_steers_away():
+    """Белое выше + моторы не переставлены: код урока рулит от линии (поэтому в подключении есть перестановка)."""
+    traj = model.simulate(LINE, (0.0, 0.0, np.radians(12)), t_end=0.1, motor=Motor(swapped=False))
+    assert traj.psi[-1] > traj.psi[0]
+
+
+def test_cache_key_sees_defaults(tmp_path, monkeypatch):
+    """Ключ кэша строится по всем параметрам: явный Motor() и умолчание дают один файл, другой Motor — второй."""
+    monkeypatch.setattr(model, "CACHE", tmp_path)
+    model.cached_simulate(LINE, (0.0, 0.0, 0.2), t_end=0.05)
+    model.cached_simulate(LINE, (0.0, 0.0, 0.2), t_end=0.05, motor=Motor())
+    assert len(list(tmp_path.glob("*.npz"))) == 1
+    model.cached_simulate(LINE, (0.0, 0.0, 0.2), t_end=0.05, motor=Motor(swapped=False))
+    assert len(list(tmp_path.glob("*.npz"))) == 2

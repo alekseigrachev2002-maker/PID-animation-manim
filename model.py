@@ -4,6 +4,7 @@
 Регулятор дискретный (ZOH между тиками), робот непрерывный: solve_ivp от тика до тика.
 """
 import hashlib
+import inspect
 from collections import deque
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -74,9 +75,15 @@ def control_parts(e, e_old, ctrl: Controller):
 
 
 def motor_pwm(u, ctrl: Controller):
-    """motors(speed − u, speed + u) с constrain ±255 → (ШИМ L, ШИМ R)."""
+    """motors(speed − u, speed + u) с constrain ±255 → (speed1 на IN1/IN2, speed2 на IN3/IN4)."""
     lim = ctrl.pwm_limit
     return np.clip(ctrl.speed - u, -lim, lim), np.clip(ctrl.speed + u, -lim, lim)
+
+
+def wheel_pwm(u, ctrl: Controller, motor: Motor):
+    """ШИМ на физических колёсах (левое, правое) с учётом того, как моторы подключены к IN1…IN4."""
+    a, b = motor_pwm(u, ctrl)
+    return (b, a) if motor.swapped else (a, b)
 
 
 # ---------- моторы ----------
@@ -182,7 +189,7 @@ def simulate(track, pose0, ctrl=Controller(), t_end=5.0, geom=Geometry(), sensor
         e = error(L, R, ctrl)
         e_old = e if e_old is None else e_old   # без рывка D на первом тике
         uP, uD = control_parts(e, e_old, ctrl)
-        pL, pR = motor_pwm(uP + uD, ctrl)
+        pL, pR = wheel_pwm(uP + uD, ctrl, motor)
         e_old = e
         aL, aR = delayed(lag, (pL, pR))
         moving = [update_moving(m, v, p, motor) for m, v, p in zip(moving, s[3:5], (aL, aR))]
@@ -231,8 +238,11 @@ def _fingerprint(obj):
 
 
 def cached_simulate(track, pose0, **kw):
-    """simulate() с кэшем в .cache/<хэш параметров>.npz."""
-    key = repr([_fingerprint(track), tuple(pose0), sorted((k, repr(v)) for k, v in kw.items())])
+    """simulate() с кэшем в .cache/<хэш параметров>.npz. Ключ — все параметры, включая значения по умолчанию."""
+    args = inspect.signature(simulate).bind(track, pose0, **kw)
+    args.apply_defaults()
+    rest = {k: v for k, v in args.arguments.items() if k not in ("track", "pose0")}
+    key = repr([_fingerprint(track), tuple(pose0), sorted((k, repr(v)) for k, v in rest.items())])
     path = CACHE / (hashlib.sha1(key.encode()).hexdigest()[:16] + ".npz")
     if path.exists():
         return Trajectory.load(path)

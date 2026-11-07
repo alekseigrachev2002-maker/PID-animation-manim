@@ -31,8 +31,8 @@ class Geometry:
 @dataclass(frozen=True)
 class Sensor:
     sigma: float = 2.5          # радиус гауссова пятна, мм
-    white: tuple = (120, 120)   # АЦП на белом, (L, R) — заглушка
-    black: tuple = (860, 860)   # АЦП на чёрном, (L, R) — заглушка
+    white: tuple = (860, 860)   # АЦП на белом, (L, R) — заглушка; белое выше (схема: фототранзистор вверху, pull-down)
+    black: tuple = (120, 120)   # АЦП на чёрном, (L, R) — заглушка
     noise: float = 0.0          # СКО шума АЦП
     line_width: float = 10.0
 
@@ -45,6 +45,7 @@ class Motor:
     v_at_150: float = 300.0     # скорость при ШИМ 150, мм/с — заглушка
     stop_eps: float = 1.0       # |v| ниже этого считаем, что колесо встало, мм/с
     delay: float = 0.0          # чистая задержка команда → колесо, с (кратна периоду регулятора)
+    swapped: bool = True        # motors(speed1, speed2): speed1 (IN1/IN2) крутит ПРАВОЕ колесо — заглушка до теста 0
 
     @property
     def k(self) -> float:
