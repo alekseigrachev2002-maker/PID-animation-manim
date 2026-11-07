@@ -65,6 +65,23 @@ class PIDScene(Scene):
         self.t.set_value(t)
         self.robot.update(0)
 
+    def return_to(self, line, target, t_slide=1.0, t_turn=1.0):
+        """Возврат между прогонами: линия подъезжает так, что середина оси встаёт в target[:2] (колёса не крутятся),
+        затем робот поворачивается на месте на target[2]. Возвращает target."""
+        x, y, psi = self.end_pose()
+        tx, ty, tpsi = target
+        if np.hypot(tx - x, ty - y) > 0.5:
+            self.switch(model.move(line, (x, y, psi), (tx, ty, psi), t_slide, roll=False,
+                                   geom=self.geom, sensor=self.sensor))
+            self.advance(t_slide, speed=1.0)
+        # кратчайший поворот к целевому курсу
+        dpsi = (tpsi - psi + np.pi) % (2 * np.pi) - np.pi
+        if abs(dpsi) > np.radians(0.5):
+            self.switch(model.move(line, (tx, ty, psi), (tx, ty, psi + dpsi), t_turn,
+                                   geom=self.geom, sensor=self.sensor))
+            self.advance(t_turn, speed=1.0)
+        return tx, ty, tpsi
+
     def end_pose(self):
         p = self.traj.at(self.t.get_value())
         return p["x"], p["y"], p["psi"]

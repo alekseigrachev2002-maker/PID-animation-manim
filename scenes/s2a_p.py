@@ -41,22 +41,13 @@ class Scene2a(PIDScene):
                                      motor=Motor(delay=self.delay), t_end=self.t_run)
 
     def reset(self, line):
-        """Возврат перед следующим прогоном; возвращает стартовую позу следующего прогона."""
-        x, y, psi = self.end_pose()
-        psi0 = np.radians(self.psi0_deg)
-        # робот всегда возвращается точно на центр линии: иначе поворот на 15° при смещении в мёртвой зоне
-        # может увести оба датчика по одну сторону, и прогон начнётся с потерянной линии
-        if model.off_line(line, (x, y, psi), self.geom, self.sensor) or abs(x) > 0.5:
-            moved = model.move(line, (x, y, psi), (0.0, y, psi), self.t_slide, roll=False,
-                               geom=self.geom, sensor=self.sensor)
-            self.switch(moved)
-            self.advance(self.t_slide, speed=1.0)
-            x = 0.0
-        if abs(psi - psi0) > np.radians(0.5):
-            turned = model.move(line, (x, y, psi), (x, y, psi0), self.t_turn, geom=self.geom, sensor=self.sensor)
-            self.switch(turned)
-            self.advance(self.t_turn, speed=1.0)
-        return x, y, psi0
+        """Возврат перед следующим прогоном: всегда точно на центр линии, затем поворот на стартовый угол.
+
+        На центр — всегда: иначе поворот на 15° при смещении в мёртвой зоне может увести оба датчика
+        по одну сторону линии, и прогон начнётся с потерянной линией.
+        """
+        _, y, _ = self.end_pose()
+        return self.return_to(line, (0.0, y, np.radians(self.psi0_deg)), self.t_slide, self.t_turn)
 
     def construct(self):
         fr, st = self.fr, self.st

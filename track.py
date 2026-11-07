@@ -106,6 +106,18 @@ def rounded_rect(w, h, radii) -> Track:
     return Track([Line(np.vstack(parts), closed=True)])
 
 
+def corner(R=100.0, before=500.0, after=800.0, turn="right") -> Track:
+    """Поворот буквой «Г»: прямая вверх до y = 0, дуга 90° радиуса R, прямая вбок."""
+    k = 1 if turn == "right" else -1
+    c = (k * R, 0.0)
+    a0 = np.pi if k > 0 else 0.0
+    parts = [_segment((0, -before), (0, 0)),
+             _arc(c, R, a0, a0 - k * np.pi / 2),
+             _segment((k * R, R), (k * (R + after), R)),
+             [[k * (R + after), R]]]
+    return Track([Line(np.vstack(parts))])
+
+
 def crossroad(y_cross=400.0, y0=-300.0, y1=3000.0, half=600.0) -> Track:
     """Прямая вдоль +y и поперечная линия на y = y_cross."""
     main = straight(y0, y1).lines[0]
