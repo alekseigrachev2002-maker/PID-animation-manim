@@ -87,6 +87,6 @@ class Scene0(PIDScene):
 
 
 if __name__ == "__main__":
-    # Кнопка ▶ в PyCharm: черновое видео 480p и сразу открыть.
-    # Кадр png 1080p: render(Scene0, "high_quality", still=True)
+    # Кнопка ▶ в PyCharm. Качество: "240p", "480p", "720p", "1080p", "4k"; still=True — только последний кадр.
+    # render(Scene0, "1080p", still=True)
     render(Scene0)

@@ -31,7 +31,6 @@ class Scene2b(RunSeries):
 
 
 if __name__ == "__main__":
-    # Кнопка ▶ в PyCharm: черновое видео 480p и сразу открыть.
-    # Кадр png 1080p:
-    render(Scene2b, "high_quality", still=True)
-    # render(Scene2b, "high_quality")
+    # Кнопка ▶ в PyCharm. Качество: "240p", "480p", "720p", "1080p", "4k"; still=True — только последний кадр.
+    render(Scene2b, "1080p", still=True)
+    # render(Scene2b, "1080p")

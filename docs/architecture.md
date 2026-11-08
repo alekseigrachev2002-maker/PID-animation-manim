@@ -45,4 +45,4 @@ class Scene2c(RunSeries):
 Сцена без регулятора (как сцена 1) — `PIDScene`: своя траектория, `self.show(...)`, `GraphPanel(...)`, `self.advance(...)`.
 
 ## Проверка
-`python -m pytest -q` — физика. Кадр сцены — `render(Scene, "high_quality", still=True)`.
+`python -m pytest -q` — физика. Кадр сцены — `render(Scene, "1080p", still=True)`; видео в 4K — `render(Scene, "4k")`, всё в `videos/`.

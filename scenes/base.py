@@ -193,15 +193,28 @@ class RunClock:
         return self.value
 
 
-def render(scene_cls, quality="low_quality", still=False, preview=True):
+QUALITIES = {   # имя → настройки Manim; рендер в любом качестве даёт одинаковую картинку, меняется только резкость
+    "240p": dict(pixel_width=426, pixel_height=240, frame_rate=15),      # быстрый предпросмотр
+    "480p": dict(quality="low_quality"),                                 # 854×480, 15 к/с
+    "720p": dict(quality="medium_quality"),                              # 1280×720, 30 к/с
+    "1080p": dict(quality="high_quality"),                               # 1920×1080, 60 к/с
+    "4k": dict(quality="fourk_quality"),                                 # 3840×2160, 60 к/с
+}
+
+
+def render(scene_cls, quality="480p", still=False, preview=True):
     """Запуск кнопкой ▶ в PyCharm.
 
-    Видео → media/videos/<Сцена>/, still=True — последний кадр png → renders/<Сцена>.png.
-    quality: "low_quality" (480p, черновик), "medium_quality" (720p), "high_quality" (1080p).
+    quality: "240p", "480p" (черновик), "720p", "1080p", "4k".
+    Видео всех сцен — в одной папке videos/: <Сцена>_<качество>.mp4 (например Scene2c_4k.mp4).
+    still=True — только последний кадр: renders/<Сцена>_<качество>.png.
     """
+    quality = {"low_quality": "480p", "medium_quality": "720p", "high_quality": "1080p",
+               "fourk_quality": "4k"}.get(quality, quality)                  # старые имена Manim — тоже можно
     name = scene_cls.__name__
-    cfg = {"quality": quality, "preview": preview, "output_file": name,
-           "media_dir": str(ROOT / "media"), "video_dir": str(ROOT / "media" / "videos" / name)}
+    cfg = {**QUALITIES[quality], "preview": preview, "output_file": f"{name}_{quality}",
+           "media_dir": str(ROOT / "media"), "video_dir": str(ROOT / "videos"),
+           "partial_movie_dir": str(ROOT / "media" / "partial" / name)}
     if still:
         cfg.update(save_last_frame=True, write_to_movie=False, images_dir=str(ROOT / "renders"))
     with tempconfig(cfg):
