@@ -68,6 +68,7 @@ class Controller:
 @dataclass(frozen=True)
 class Style:
     font: str = "Inter"
+    code_font: tuple = ("Consolas", "JetBrains Mono", "DejaVu Sans Mono", "Courier New")  # первый найденный
     L: str = "#4C8DF6"
     R: str = "#F59E0B"
     e: str = "#34D399"

@@ -16,7 +16,7 @@ from manim import (DOWN, LEFT, RIGHT, UP, DashedLine, Dot, FadeIn, FadeOut, Line
                    Succession, ValueTracker, VGroup, VMobject)
 
 from params import Style
-from visuals.layout import Z_UI, baseline, on_baseline, text
+from visuals.layout import Z_UI, baseline, on_baseline, pick_font, text
 
 ORIGIN_PT = np.zeros(3)
 
@@ -63,14 +63,25 @@ class Header(VGroup):
         t = text(self.fr, s, 22, self.st.muted, self.st).next_to(self.phrase, RIGHT, buff=10 * self.fr.unit)
         return on_baseline(t, baseline(self.phrase)).set_z_index(Z_UI)
 
-    def _block(self, s, color):
-        fr = self.fr
-        t = text(fr, s, 20, self.st.text, self.st)
-        box = RoundedRectangle(corner_radius=8 * fr.unit, width=t.width + 40 * fr.unit, height=44 * fr.unit,
-                               stroke_color=color, stroke_width=fr.stroke(2), fill_color=color, fill_opacity=0.14)
-        g = VGroup(box, t.move_to(box))
-        g.move_to(fr.px(fr.layout.graph_w_px - fr.layout.margin_px, fr.layout.header_y_px), aligned_edge=RIGHT)
-        return g.set_z_index(Z_UI)
+    def _block(self, s, colors):
+        """Формула как фрагмент кода: моноширинный шрифт на тёмной подложке, части формулы — цветом своих кривых.
+
+        colors: [(часть формулы, цвет)], например [("err", st.e)]; позже в списке — главнее.
+        """
+        fr, st = self.fr, self.st
+        t = text(fr, s, 19, st.text, st, font=pick_font(st.code_font))
+        glyphs = s.replace(" ", "")
+        for part, color in colors:
+            part, i = part.replace(" ", ""), glyphs.find(part.replace(" ", ""))
+            while i >= 0:
+                for k in range(i, i + len(part)):
+                    t[k].set_color(color)
+                i = glyphs.find(part, i + 1)
+        t.move_to(fr.px(fr.layout.graph_w_px - fr.layout.margin_px - 14, 0), aligned_edge=RIGHT)
+        on_baseline(t, baseline(self.phrase))
+        box = RoundedRectangle(corner_radius=6 * fr.unit, width=t.width + 28 * fr.unit, height=36 * fr.unit,
+                               stroke_width=0, fill_color=st.block, fill_opacity=1).move_to(t)
+        return VGroup(box, t).set_z_index(Z_UI)
 
     def _swap(self, attr, new):
         old = getattr(self, attr)
@@ -80,8 +91,8 @@ class Header(VGroup):
         self.remove(old)
         return swap(old, new)
 
-    def set_formula(self, s, color):
-        return self._swap("block", self._block(s, color))
+    def set_formula(self, s, colors=()):
+        return self._swap("block", self._block(s, colors))
 
     def set_caption(self, s):
         return self._swap("caption", self._caption(s))
@@ -293,8 +304,9 @@ class GraphPanel(VGroup):
             x_px = fr.to_px_x(self.legend.get_right()[0]) + 40
             self.readout = MotorReadout(fr, x_px, st=st, **readout)
 
-    def set_formula(self, s, color="e"):
-        return self.header.set_formula(s, color_of(self.st, color))
+    def set_formula(self, s, colors=(("err", "e"),)):
+        """Формула в шапке; colors — какие части каким цветом: [("err", "e"), ("kd·Δerr", "D")]."""
+        return self.header.set_formula(s, [(part, color_of(self.st, c)) for part, c in colors])
 
     def set_caption(self, s):
         return self.header.set_caption(s)

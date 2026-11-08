@@ -110,6 +110,7 @@ class RunSeries(PIDScene):
     """
     phrase = "Подбираем P"
     formula = "control = kp·err"
+    formula_colors = [("err", "e")]     # части формулы цветом своих кривых
     law = "kp·err"                     # слагаемое в формулах колёс: 150 ± law
     runs = []
     signals = [ERR]
@@ -140,7 +141,7 @@ class RunSeries(PIDScene):
                            readout=dict(signs=model.wheel_signs(Motor()), law=self.law))
         self.show(self.track, traj, items=[panel.readout])
         self.add(panel)
-        self.play(panel.set_formula(self.formula), run_time=0.8)
+        self.play(panel.set_formula(self.formula, self.formula_colors), run_time=0.8)
         readout = panel.readout
         for i, (ctrl, caption) in enumerate(self.runs):
             if i > 0:

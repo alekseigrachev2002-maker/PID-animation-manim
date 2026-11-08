@@ -41,12 +41,20 @@ class Frame:
         return self.px(*self.layout.robot_px)
 
 
-def text(fr, s, px, color, st=Style(), **kw):
-    """Текст шрифтом стиля; знак умножения «·» опущен на середину строчных букв (в Inter он стоит выше)."""
-    t = Text(s, font=st.font, font_size=fr.font(px), color=color, **kw)
+def pick_font(candidates):
+    """Первый шрифт из списка, который есть в системе (Consolas на Windows, DejaVu Sans Mono на Linux)."""
+    import manimpango
+    have = set(manimpango.list_fonts())
+    return next((f for f in candidates if f in have), candidates[-1])
+
+
+def text(fr, s, px, color, st=Style(), font=None, **kw):
+    """Текст шрифтом стиля (или font); знак умножения «·» опущен на середину строчных букв."""
+    font = font or st.font
+    t = Text(s, font=font, font_size=fr.font(px), color=color, **kw)
     glyphs = s.replace(" ", "")
     if "·" in glyphs and len(glyphs) == len(t):
-        dy = _dot_lift(st.font, fr.font(px), kw.get("weight", "NORMAL"))
+        dy = _dot_lift(font, fr.font(px), kw.get("weight", "NORMAL"))
         for i, ch in enumerate(glyphs):
             if ch == "·":
                 t[i].shift(dy * DOWN)

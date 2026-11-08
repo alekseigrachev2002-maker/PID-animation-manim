@@ -54,7 +54,7 @@ class Scene1(PIDScene):
         self.play(dim.animate.set_value(0.35), prog.animate.set_value(1.0), panel.plot.lo.animate.set_value(-1023),
                   ref_op.animate.set_value(0.0),
                   panel.set_legend([(Signal("L", "L", "L"), 0.35), (Signal("R", "R", "R"), 0.35), ERR]),
-                  panel.set_formula(ERR.label), panel.set_caption("разность сигналов"), run_time=1.2)
+                  panel.set_formula(ERR.label, [("err", "e"), ("L", "L"), ("R", "R")]), panel.set_caption("разность сигналов"), run_time=1.2)
         self.add(cE)
         self.play(e_end.animate.set_value(self.t.get_value()), run_time=1.5, rate_func=linear)
         e_end.set_value(1e9)

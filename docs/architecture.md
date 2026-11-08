@@ -26,6 +26,7 @@ scenes/s*.py       сцены
 ```python
 class Scene2c(RunSeries):
     phrase, formula, law = "Вводим D", "control = kp·err + kd·Δerr", "control"
+    formula_colors = [("kp·err", "e"), ("kd·Δerr", "D")]
     signals = [Signal("uP", "uP", "e"), Signal("uD", "uD", "D")]
     runs = [(dict(kp=0.3, kd=0), "без D"), (dict(kp=0.3, kd=2), "с D")]
 
