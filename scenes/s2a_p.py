@@ -19,7 +19,7 @@ class Scene2a(RunSeries):
     runs = [
         (0.0, "kp = 0, нет регуляции"),
         (0.3, "kp = 0.3, едет по линии"),
-        (0.8, "kp = 0.8, перерегулирование"),
+        (0.6, "kp = 0.6, перерегулирование"),
     ]
     psi0_deg = 15.0       # стартовый поворот относительно линии
 
@@ -33,5 +33,6 @@ class Scene2a(RunSeries):
 
 if __name__ == "__main__":
     # Кнопка ▶ в PyCharm: черновое видео 480p и сразу открыть.
-    # Кадр png 1080p: render(Scene2a, "high_quality", still=True)
-    render(Scene2a)
+    # Кадр png 1080p:
+    render(Scene2a, "high_quality", still=True)
+    # render(Scene2a, "high_quality")

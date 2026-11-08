@@ -20,7 +20,7 @@ def swing(amp_deg, period, cycles, dt=0.005):
 
 
 class Scene1(PIDScene):
-    amp_deg = 18.0     # амплитуда качания
+    amp_deg = 15.0     # амплитуда качания
     period = 2.0       # период качания, с
     speed = 0.5        # проигрывание вдвое медленнее
 
@@ -67,5 +67,6 @@ class Scene1(PIDScene):
 
 if __name__ == "__main__":
     # Кнопка ▶ в PyCharm: черновое видео 480p и сразу открыть.
-    # Кадр png 1080p: render(Scene1, "high_quality", still=True)
-    render(Scene1)
+    # Кадр png 1080p:
+    render(Scene1, "high_quality", still=True)
+    # render(Scene1, "high_quality")
