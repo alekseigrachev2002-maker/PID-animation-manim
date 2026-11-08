@@ -121,9 +121,9 @@ class RunSeries(PIDScene):
         def start(self, i): ...                   # поза старта прогона i (для i > 0 — после возврата)
     """
     phrase = "Подбираем P"
-    formula = "control = kp·err"
+    formula = "control = err * kp"     # как в скетче урока
     formula_colors = [("err", "e")]     # части формулы цветом своих кривых
-    law = "kp·err"                     # слагаемое в формулах колёс: 150 ± law
+    law = "control"                    # в формулах колёс: 150 ± control, как motors(speed − control, speed + control)
     runs = []
     signals = [ERR]
     y = ("err", -1023, 1023)

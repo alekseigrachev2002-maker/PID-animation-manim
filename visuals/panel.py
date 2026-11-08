@@ -2,8 +2,8 @@
 
     panel = GraphPanel(fr, st, "Подбираем P", "kp = 0.3, едет по линии",
                        y=("err", -1023, 1023), t_max=2.2, t_ticks=[0, 0.5, 1, 1.5, 2],
-                       signals=[ERR], readout=dict(signs=(1, -1), law="kp·err"))
-    self.play(panel.set_formula("control = kp·err"))
+                       signals=[ERR], readout=dict(signs=(1, -1)))
+    self.play(panel.set_formula("control = err * kp"))
     curves = panel.curves(traj, self.t)            # кривые всех сигналов, растут за трекером t
 
 Сигнал — что рисуем на графике: подпись в легенде, поле траектории, цвет.
@@ -243,7 +243,7 @@ class Number(VGroup):
         if k not in self.cache:
             t = text(self.fr, str(k).replace("-", "−"), self.px, self.color, self.st)
             ref = np.array([t.get_left()[0], t[-1].get_bottom()[1], 0.0])
-            self.cache[k] = [g.get_points() - ref for g in t]
+            self.cache[k] = [g.points - ref for g in t]
         return self.cache[k]
 
     def set_value(self, v, left_base):
@@ -257,7 +257,7 @@ class Number(VGroup):
 
 
 class MotorReadout(VGroup):
-    """«▬ левый мотор 150 + kp·err = 255   ▬ правый мотор 150 − kp·err = 45» — ШИМ физических колёс.
+    """«▬ левый мотор 150 + control = 255   ▬ правый мотор 150 − control = 45» — ШИМ физических колёс.
 
     Полоска — цвет оси колеса на роботе; знаки — из подключения моторов (model.wheel_signs).
     Число стоит сразу после «=»; следующая группа отстоит на ширину самого длинного числа — строка не дёргается.
@@ -266,7 +266,7 @@ class MotorReadout(VGroup):
     NUM_W = 40   # место под самое длинное число («−255»), px
     PX = 15      # кегль строки, px
 
-    def __init__(self, fr, x_px, signs, law="kp·err", st=Style()):
+    def __init__(self, fr, x_px, signs, law="control", st=Style()):
         super().__init__()
         self.fr, self.st = fr, st
         self.opacity = ValueTracker(1.0)
@@ -319,6 +319,9 @@ class GraphPanel(VGroup):
         if readout is not None:
             x_px = fr.to_px_x(self.legend.get_right()[0]) + 40
             self.readout = MotorReadout(fr, x_px, st=st, **readout)
+        right = (self.readout or self.legend).get_right()[0]
+        if right > fr.px(fr.layout.graph_w_px - fr.layout.margin_px, 0)[0]:
+            warnings.warn("нижняя строка (легенда и ШИМ колёс) не помещается в панель — сократите подписи сигналов")
 
     def set_formula(self, s, colors=(("err", "e"),)):
         """Формула в шапке; colors — какие части каким цветом: [("err", "e"), ("kd·Δerr", "D")]."""

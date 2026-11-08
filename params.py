@@ -61,7 +61,7 @@ class Controller:
     kp: float = 0.3
     kd: float = 0.0             # на один тик регулятора
     balance: float = 1.0        # sensorBalance
-    period: float = 0.005       # период регулятора, с
+    period: float = 0.010       # период регулятора, с: в скетче delay(10) в loop(); остальное в цикле ≪ 10 мс
     pwm_limit: float = 255.0
 
 
