@@ -205,3 +205,12 @@ def test_speed_at_matches_wheels():
     run = model.simulate(LINE, (0.0, 0.0, 0.0), t_end=1.0)
     v, w = run.speed_at(0.9)
     assert v == pytest.approx((run.vL[-1] + run.vR[-1]) / 2, rel=0.01) and abs(w) < 1e-3
+
+
+def test_drive_ramp_then_stop():
+    ramp = lambda t: (255 * t / 0.6,) * 2
+    tr = model.drive(LINE, (0.0, 0.0, 0.0), ramp, 0.6, stop=True)
+    i67 = np.argmax(tr.pwmL > Motor().pwm_start)
+    assert tr.pwmL.max() == pytest.approx(255 * (0.6 - 0.005) / 0.6, rel=0.01)   # команда — лесенка по тактам
+    assert tr.y[np.searchsorted(tr.t, tr.tt[i67])] == pytest.approx(0, abs=1e-6)  # до порога трогания стоит
+    assert tr.pwmL[-1] == 0 and tr.speed_at(tr.t[-1])[0] < 5                     # потом стоп и докатился

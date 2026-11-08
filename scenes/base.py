@@ -33,10 +33,13 @@ class PIDScene(Scene):
 
     # ---------- стенд ----------
 
-    def show(self, track, traj, camera="follow", center=(0.0, 0.0), sensors=True, items=()):
-        """Поставить на стенд поле, робота и элементы items (у каждого — update_state(state))."""
+    def show(self, track, traj, camera="follow", center=(0.0, 0.0), anchor_px=None, sensors=True, items=()):
+        """Поставить на стенд поле, робота и элементы items (у каждого — update_state(state)).
+
+        camera: "follow" или "fixed"; center — точка поля (мм) в точке экрана anchor_px (по умолчанию Layout.robot_px).
+        """
         self.track, self.traj = track, traj
-        self.view = Camera(self.fr, camera, center)
+        self.view = Camera(self.fr, camera, center, None if anchor_px is None else self.fr.px(*anchor_px))
         self.field = Field(self.view, track, self.sensor, self.st)
         self.robot = Robot(self.fr, self.geom, self.st, self.sensor, sensors)
         self.items = [m for m in items if m is not None]

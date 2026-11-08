@@ -66,17 +66,21 @@ class Header(VGroup):
     def _block(self, s, colors):
         """Формула как фрагмент кода: моноширинный шрифт на тёмной подложке, части формулы — цветом своих кривых.
 
-        colors: [(часть формулы, цвет)], например [("err", st.e)]; позже в списке — главнее.
+        colors: [(часть формулы, цвет)] — все вхождения, или (часть, цвет, n) — только n-е вхождение (с нуля);
+        например [("err", st.e)] или [("-150", L), ("150", R, 1)]. Позже в списке — главнее.
         """
         fr, st = self.fr, self.st
         t = text(fr, s, 19, st.text, st, font=pick_font(st.code_font))
         glyphs = s.replace(" ", "")
-        for part, color in colors:
-            part, i = part.replace(" ", ""), glyphs.find(part.replace(" ", ""))
+        for part, color, *n in colors:
+            part = part.replace(" ", "")
+            hits, i = [], glyphs.find(part)
             while i >= 0:
+                hits.append(i)
+                i = glyphs.find(part, i + 1)
+            for i in (hits if not n else hits[n[0]:n[0] + 1]):
                 for k in range(i, i + len(part)):
                     t[k].set_color(color)
-                i = glyphs.find(part, i + 1)
         t.move_to(fr.px(fr.layout.graph_w_px - fr.layout.margin_px - 14, 0), aligned_edge=RIGHT)
         on_baseline(t, baseline(self.phrase))
         box = RoundedRectangle(corner_radius=6 * fr.unit, width=t.width + 28 * fr.unit, height=36 * fr.unit,
@@ -306,7 +310,7 @@ class GraphPanel(VGroup):
 
     def set_formula(self, s, colors=(("err", "e"),)):
         """Формула в шапке; colors — какие части каким цветом: [("err", "e"), ("kd·Δerr", "D")]."""
-        return self.header.set_formula(s, [(part, color_of(self.st, c)) for part, c in colors])
+        return self.header.set_formula(s, [(part, color_of(self.st, c), *n) for part, c, *n in colors])
 
     def set_caption(self, s):
         return self.header.set_caption(s)

@@ -234,23 +234,30 @@ def simulate(track, pose0, ctrl=Controller(), t_end=5.0, geom=Geometry(), sensor
     return _pack(np.hstack(cont), np.array(ticks), lost_at)
 
 
-def _commanded(track, s, moving, cmd, t_end, ctrl, geom, sensor, motor, until_still=False):
-    """Езда с постоянными командами ШИМ колёсам cmd = (левое, правое) — без регулятора.
+def _commanded(track, s, moving, cmd, t_on, ctrl, geom, sensor, motor, stop=False, t_guard=30.0):
+    """Езда без регулятора: команды ШИМ колёсам cmd(t) → (левое, правое) пока t < t_on.
 
-    until_still: ехать, пока оба колеса не встанут (t_end — только предохранитель от бесконечного цикла).
+    stop: затем motors(0, 0), пока оба колеса не встанут — в той же траектории (график видит и стоп).
+    До старта в очереди задержки — нули: команды начинают действовать через Motor.delay.
     """
     cont, ticks = [], []
-    lag = deque([cmd] * int(round(motor.delay / ctrl.period)))
-    for k in range(int(round(t_end / ctrl.period))):
+    lag = deque([(0.0, 0.0)] * int(round(motor.delay / ctrl.period)))
+    k = 0
+    while True:
         t0 = k * ctrl.period
+        on = t0 < t_on
+        if not on and not stop:
+            break
+        c = tuple(map(float, cmd(t0))) if on else (0.0, 0.0)
         L, R = to_channels(read_sensors(track, s[:3], geom, sensor), sensor)
-        s, moving, chunk = _wheel_step(s, moving, delayed(lag, cmd), t0, ctrl.period, motor, geom)
+        s, moving, chunk = _wheel_step(s, moving, delayed(lag, c), t0, ctrl.period, motor, geom)
         cont.append(chunk)
-        ticks.append((t0, L, R, error(L, R, ctrl), 0.0, 0.0, *cmd))
-        if until_still and not any(moving):
-            return _pack(np.hstack(cont), np.array(ticks), np.nan)
-    if until_still:
-        raise RuntimeError(f"колёса не встали за {t_end} с — проверьте Motor.tau и stop_eps")
+        ticks.append((t0, L, R, error(L, R, ctrl), 0.0, 0.0, *c))
+        if not on and not any(moving):
+            break
+        if t0 > t_on + t_guard:
+            raise RuntimeError(f"колёса не встали за {t_guard} с — проверьте Motor.tau и stop_eps")
+        k += 1
     return _pack(np.hstack(cont), np.array(ticks), np.nan)
 
 
@@ -261,13 +268,17 @@ def brake(track, traj, ctrl=Controller(), geom=Geometry(), sensor=Sensor(), moto
     """
     s = np.array([traj.x[-1], traj.y[-1], traj.psi[-1], traj.vL[-1], traj.vR[-1], traj.sL[-1], traj.sR[-1]])
     moving = [abs(s[3]) > motor.stop_eps, abs(s[4]) > motor.stop_eps]
-    return _commanded(track, s, moving, (0.0, 0.0), 30.0, ctrl, geom, sensor, motor, until_still=True)
+    return _commanded(track, s, moving, lambda t: (0, 0), 0.0, ctrl, geom, sensor, motor, stop=True)
 
 
-def drive(track, pose0, pwm, t_end, ctrl=Controller(), geom=Geometry(), sensor=Sensor(), motor=Motor()):
-    """Езда с места с постоянным ШИМ физических колёс pwm = (левое, правое): разгон, порог трогания — по физике."""
+def drive(track, pose0, pwm, t_on, stop=False, ctrl=Controller(), geom=Geometry(), sensor=Sensor(), motor=Motor()):
+    """Езда с места без регулятора: ШИМ физических колёс pwm = (левое, правое) или функция pwm(t) → (лев, прав).
+
+    Разгон, порог трогания, отставание — по физике мотора. stop: после t_on — motors(0, 0) и докатывание.
+    """
+    fn = pwm if callable(pwm) else (lambda t: pwm)
     s = np.array([*pose0, 0.0, 0.0, 0.0, 0.0])
-    return _commanded(track, s, [False, False], tuple(map(float, pwm)), t_end, ctrl, geom, sensor, motor)
+    return _commanded(track, s, [False, False], fn, t_on, ctrl, geom, sensor, motor, stop=stop)
 
 
 def off_line(track, pose, geom=Geometry(), sensor=Sensor(), seen=0.02):
