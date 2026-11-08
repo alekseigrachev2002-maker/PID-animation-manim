@@ -50,7 +50,7 @@ class Scene1(PIDScene):
         refs = [panel.plot.hline(sens.black[0], f"чёрный ≈ {sens.black[0]}", ref_op),
                 panel.plot.hline(sens.white[0], f"белый ≈ {sens.white[0]}", ref_op)]
         dim = ValueTracker(1.0)
-        cL, cR = panel.curve(self.traj, L, self.t, dim), panel.curve(self.traj, R, self.t, dim)
+        cL, cR = panel.curves(self.traj, self.t, dim)
         self.add(panel, *refs, cL, cR)
         self.wait(0.5)
 

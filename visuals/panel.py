@@ -199,18 +199,28 @@ class Plot:
         upd(g)
         return g.set_z_index(Z_UI)
 
-    def curve(self, tt, vals, color, t_end, opacity=None, width_px=3.0):
-        """Растущая кривая до момента t_end (ValueTracker или функция) с точкой на конце."""
+    def curve(self, tt, vals, color, t_end, opacity=None, width_px=3.0, peers=None):
+        """Растущая кривая до момента t_end (ValueTracker или функция) с точкой на конце.
+
+        peers — общий список кривых одной траектории: где кривые ближе друг к другу, чем толщина линии,
+        они расходятся (см. SPREAD), чтобы совпадающая кривая не прятала другую.
+        """
         fr = self.fr
         get_end = t_end.get_value if hasattr(t_end, "get_value") else t_end
         line = VMobject(stroke_color=color, stroke_width=fr.stroke(width_px))
         dot = Dot(radius=4 * fr.unit, color=color)
+        me = dict(tt=np.asarray(tt, float), vals=np.asarray(vals, float), width=width_px, order=0, dirs={})
+        if peers is not None:
+            me["order"] = len(peers)
+            peers.append(me)
 
         def upd(m):
             te = get_end()
             i = int(np.searchsorted(tt, te, side="right"))
             ts = np.append(tt[:i], te) if i < len(tt) else tt
             pts = self.to_screen(ts, np.interp(ts, tt, vals))
+            if peers is not None:
+                pts += self._spread(me, peers, ts, pts[:, 1])[:, None] * fr.unit * self._normals(pts)
             if len(pts) < 2:
                 pts = np.vstack([pts, pts])
             m[0].set_points_as_corners(pts)
@@ -222,6 +232,73 @@ class Plot:
         g = VGroup(line, dot).add_updater(upd)
         upd(g)
         return g.set_z_index(Z_UI + 1)
+
+    SPREAD = 0.35      # сдвиг совпадающих кривых, доля толщины линии в каждую сторону
+
+    @staticmethod
+    def _normals(pts):
+        """Единичные нормали к ломаной, «вверх» от неё (влево по ходу времени): на пологих участках сдвиг
+        вверх-вниз, на крутых — вбок, иначе совпадающие кривые на крутом спуске не разошлись бы."""
+        if len(pts) < 2:
+            return np.array([[0.0, 1.0, 0.0]] * len(pts))
+        tx, ty = np.gradient(pts[:, 0]), np.gradient(pts[:, 1])
+        n = np.hypot(tx, ty)
+        ok = n > 1e-12
+        out = np.zeros_like(pts)
+        out[:, 1] = 1.0
+        out[ok, 0], out[ok, 1] = -ty[ok] / n[ok], tx[ok] / n[ok]
+        return out
+
+    def _spread(self, me, peers, ts, y):
+        """Сдвиг кривой me «вверх» (px эталонного кадра, вдоль нормали) в точках ts; y — её экранные координаты.
+
+        Сдвиг полный, когда кривые совпадают, и плавно сходит на нет к расстоянию в одну толщину линии.
+        Направление — какая кривая выше по данным, та и уходит вверх. На участке точного равенства — как кривые
+        разойдутся после него (или как сходились до него); если порядок до и после разный, направление меняется
+        плавно — кривые пересекаются посередине участка. Совсем без различий — выше та, что раньше в списке.
+        """
+        out = np.zeros(len(ts))
+        for other in peers:
+            if other is me:
+                continue
+            assert len(other["tt"]) == len(me["tt"]), "раздвигаются только кривые одной траектории"
+            w = (me["width"] + other["width"]) / 2
+            d_px = (y - self.to_screen(ts, np.interp(ts, other["tt"], other["vals"]))[:, 1]) / self.fr.unit
+            k = np.clip(1 - np.abs(d_px) / w, 0, 1)
+            k = k * k * (3 - 2 * k)                                      # плавно: smoothstep
+            out += self.SPREAD * w * k * np.interp(ts, me["tt"], self._direction(me, other))
+        return out
+
+    @staticmethod
+    def _direction(me, other):
+        """+1 — me выше other, −1 — ниже; на участках равенства — по соседям (см. _spread). Кэшируется."""
+        key = id(other)
+        if key not in me["dirs"]:
+            diff = me["vals"] - other["vals"]
+            tol = 1e-9 * max(1.0, np.abs(me["vals"]).max(), np.abs(other["vals"]).max())
+            sgn = np.sign(diff) * (np.abs(diff) > tol)
+            tie = sgn == 0
+            idx = np.arange(len(sgn))
+            if tie.all():
+                sgn = np.full(len(sgn), 1.0 if me["order"] < other["order"] else -1.0)
+            elif tie.any():
+                known = idx[~tie]
+                prev = np.searchsorted(known, idx, side="right") - 1       # последний различный слева
+                nxt = np.searchsorted(known, idx, side="left")             # первый различный справа
+                for i0 in idx[tie & ((np.r_[False, tie[:-1]]) == False)]:  # начало каждого участка равенства
+                    i1 = i0
+                    while i1 + 1 < len(sgn) and tie[i1 + 1]:
+                        i1 += 1
+                    a = sgn[known[prev[i0]]] if prev[i0] >= 0 else None
+                    b = sgn[known[nxt[i1]]] if nxt[i1] < len(known) else None
+                    a, b = (b if a is None else a), (a if b is None else b)
+                    if a == b:
+                        sgn[i0:i1 + 1] = a
+                    else:                                                  # порядок меняется: плавно через 0
+                        f = (np.arange(i0, i1 + 1) - i0 + 1) / (i1 - i0 + 2)
+                        sgn[i0:i1 + 1] = a + (b - a) * f
+            me["dirs"][key] = sgn.astype(float)
+        return me["dirs"][key]
 
 
 # ---------- доп. легенда: ШИМ колёс ----------
@@ -337,10 +414,11 @@ class GraphPanel(VGroup):
         self.remove(old)
         return swap(old, new)
 
-    def curve(self, traj, sig, t_end, opacity=None):
+    def curve(self, traj, sig, t_end, opacity=None, peers=None):
         return self.plot.curve(traj.tt, getattr(traj, sig.key), color_of(self.st, sig.color), t_end, opacity,
-                               sig.width_px)
+                               sig.width_px, peers)
 
-    def curves(self, traj, t_end, opacity=None):
-        """Кривые всех сигналов панели для траектории traj."""
-        return VGroup(*[self.curve(traj, s, t_end, opacity) for s in self.signals])
+    def curves(self, traj, t_end, opacity=None, signals=None):
+        """Кривые сигналов панели (или signals) для траектории traj; где они совпадают — расходятся."""
+        peers = []
+        return VGroup(*[self.curve(traj, s, t_end, opacity, peers) for s in (signals or self.signals)])
