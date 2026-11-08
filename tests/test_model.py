@@ -48,19 +48,35 @@ def test_turned_left_heading_decreases():
     assert traj.psi[-1] < traj.psi[0]
 
 
-@pytest.mark.parametrize("x", np.linspace(-11, 11, 23))
-def test_dead_zone_offset(x):
-    assert abs(e_at(x=x)) < 1
+# Мёртвая зона из геометрии: оба датчика на белом, пока до края линии больше 3σ.
+# Смещение на x: датчик в sensor_x − x от осевой. Поворот на ψ: боковое положение датчика
+# sensor_x·cosψ − sensor_y·sinψ = r·sin(α − ψ), где r — расстояние до датчика, α = atan2(sensor_x, sensor_y).
+DZ_X = G.sensor_x - S.line_width / 2 - 3 * S.sigma
+_r = np.hypot(G.sensor_x, G.sensor_y)
+DZ_PSI = np.degrees(np.arctan2(G.sensor_x, G.sensor_y) - np.arcsin((S.line_width / 2 + 3 * S.sigma) / _r))
 
 
-@pytest.mark.parametrize("psi", np.linspace(-6.5, 6.5, 14))
-def test_dead_zone_heading(psi):
-    assert abs(e_at(psi_deg=psi)) < 1
+@pytest.mark.parametrize("k", np.linspace(-0.95, 0.95, 21))
+def test_dead_zone_offset(k):
+    assert abs(e_at(x=k * DZ_X)) < 1
 
 
-@pytest.mark.parametrize("x, psi", [(18, 0), (-18, 0), (0, 10), (0, -10)])
-def test_outside_dead_zone(x, psi):
-    assert abs(e_at(x, psi)) > 100
+@pytest.mark.parametrize("k", np.linspace(-0.95, 0.95, 21))
+def test_dead_zone_heading(k):
+    assert abs(e_at(psi_deg=k * DZ_PSI)) < 1
+
+
+@pytest.mark.parametrize("sign", [1, -1])
+def test_outside_dead_zone(sign):
+    edge_x = G.sensor_x - S.line_width / 2          # датчик ровно на краю линии
+    assert abs(e_at(x=sign * (edge_x - S.sigma))) > 100
+    assert abs(e_at(psi_deg=sign * (DZ_PSI + 4))) > 100
+
+
+def test_dead_zone_numbers_for_field_line():
+    """Линия поля 30 мм: мёртвая зона узкая — около ±1.5 мм и ±0.8°."""
+    assert S.line_width == 30
+    assert DZ_X == pytest.approx(1.29, abs=0.05) and DZ_PSI == pytest.approx(0.8, abs=0.1)
 
 
 def test_stuck_wheel_needs_start_threshold():

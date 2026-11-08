@@ -36,7 +36,7 @@ class Sensor:
     black: tuple = (120, 120)   # АЦП на чёрном, (левый, правый) физически — заглушка
     swapped: bool = False       # A0 (L в коде) подключён к физически ПРАВОМУ датчику — до теста 0
     noise: float = 0.0          # СКО шума АЦП
-    line_width: float = 10.0
+    line_width: float = 30.0   # поле 2400×1500 (PDF): линия 30 мм
 
 
 @dataclass(frozen=True)
