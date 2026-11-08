@@ -165,6 +165,15 @@ class Trajectory:
         return {k: np.interp(t, self.t, getattr(self, k))
                 for k in ("x", "y", "psi", "vL", "vR", "sL", "sR")}
 
+    def speed_at(self, t, h=GRID):
+        """Скорость (мм/с) и угловая скорость (рад/с) робота в момент t — по изменению позы."""
+        a, b = max(t - h, self.t[0]), min(t + h, self.t[-1])
+        if b <= a:
+            return 0.0, 0.0
+        pa, pb = self.at(a), self.at(b)
+        return (float(np.hypot(pb["x"] - pa["x"], pb["y"] - pa["y"]) / (b - a)),
+                float((pb["psi"] - pa["psi"]) / (b - a)))
+
     def signals_at(self, t):
         """Значения регулятора, действующие в момент t (ZOH)."""
         i = np.clip(np.searchsorted(self.tt, t, side="right") - 1, 0, len(self.tt) - 1)
@@ -225,23 +234,40 @@ def simulate(track, pose0, ctrl=Controller(), t_end=5.0, geom=Geometry(), sensor
     return _pack(np.hstack(cont), np.array(ticks), lost_at)
 
 
-def brake(track, traj, ctrl=Controller(), geom=Geometry(), sensor=Sensor(), motor=Motor(), t_max=0.8):
-    """Остановка после прогона: motors(0, 0), робот докатывается, пока колёса не встанут (или t_max).
+def _commanded(track, s, moving, cmd, t_end, ctrl, geom, sensor, motor, until_still=False):
+    """Езда с постоянными командами ШИМ колёсам cmd = (левое, правое) — без регулятора.
 
-    Стартует из конца траектории traj; путь колёс продолжается с того же значения.
+    until_still: ехать, пока оба колеса не встанут (t_end — только предохранитель от бесконечного цикла).
+    """
+    cont, ticks = [], []
+    lag = deque([cmd] * int(round(motor.delay / ctrl.period)))
+    for k in range(int(round(t_end / ctrl.period))):
+        t0 = k * ctrl.period
+        L, R = to_channels(read_sensors(track, s[:3], geom, sensor), sensor)
+        s, moving, chunk = _wheel_step(s, moving, delayed(lag, cmd), t0, ctrl.period, motor, geom)
+        cont.append(chunk)
+        ticks.append((t0, L, R, error(L, R, ctrl), 0.0, 0.0, *cmd))
+        if until_still and not any(moving):
+            return _pack(np.hstack(cont), np.array(ticks), np.nan)
+    if until_still:
+        raise RuntimeError(f"колёса не встали за {t_end} с — проверьте Motor.tau и stop_eps")
+    return _pack(np.hstack(cont), np.array(ticks), np.nan)
+
+
+def brake(track, traj, ctrl=Controller(), geom=Geometry(), sensor=Sensor(), motor=Motor()):
+    """Остановка после прогона: motors(0, 0), робот докатывается, пока колёса не встанут.
+
+    Стартует из конца траектории traj с теми же скоростями колёс; путь колёс продолжается.
     """
     s = np.array([traj.x[-1], traj.y[-1], traj.psi[-1], traj.vL[-1], traj.vR[-1], traj.sL[-1], traj.sR[-1]])
     moving = [abs(s[3]) > motor.stop_eps, abs(s[4]) > motor.stop_eps]
-    cont, ticks = [], []
-    for k in range(int(round(t_max / ctrl.period))):
-        t0 = k * ctrl.period
-        L, R = to_channels(read_sensors(track, s[:3], geom, sensor), sensor)
-        s, moving, chunk = _wheel_step(s, moving, (0.0, 0.0), t0, ctrl.period, motor, geom)
-        cont.append(chunk)
-        ticks.append((t0, L, R, error(L, R, ctrl), 0.0, 0.0, 0.0, 0.0))
-        if not any(moving):
-            break
-    return _pack(np.hstack(cont), np.array(ticks), np.nan)
+    return _commanded(track, s, moving, (0.0, 0.0), 30.0, ctrl, geom, sensor, motor, until_still=True)
+
+
+def drive(track, pose0, pwm, t_end, ctrl=Controller(), geom=Geometry(), sensor=Sensor(), motor=Motor()):
+    """Езда с места с постоянным ШИМ физических колёс pwm = (левое, правое): разгон, порог трогания — по физике."""
+    s = np.array([*pose0, 0.0, 0.0, 0.0, 0.0])
+    return _commanded(track, s, [False, False], tuple(map(float, pwm)), t_end, ctrl, geom, sensor, motor)
 
 
 def off_line(track, pose, geom=Geometry(), sensor=Sensor(), seen=0.02):

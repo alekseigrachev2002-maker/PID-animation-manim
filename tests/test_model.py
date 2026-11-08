@@ -171,3 +171,37 @@ def test_brake_stops_smoothly():
     assert v[0] == pytest.approx((run.vL[-1] + run.vR[-1]) / 2, rel=1e-3)   # без скачка скорости
     assert v[-1] < 2 and stop.y[-1] > run.y[-1]                               # докатился и встал
     assert stop.sL[0] == pytest.approx(run.sL[-1])
+
+
+def test_drive_below_start_threshold_stays():
+    tr = model.drive(LINE, (0.0, 0.0, 0.0), (60, 60), 0.5)          # ШИМ 60 < порога трогания 67
+    assert tr.y[-1] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_drive_spin_in_place_keeps_axle():
+    tr = model.drive(LINE, (0.0, 0.0, 0.0), (-150, 150), 1.0)       # левое назад, правое вперёд
+    assert np.hypot(tr.x, tr.y).max() < 1e-6
+    assert tr.psi[-1] > 1.0                                           # повернулся влево (против часовой)
+
+
+def test_drive_arc_radius():
+    m = Motor()
+    tr = model.drive(LINE, (0.0, 0.0, 0.0), (200, 100), 3.0)
+    vl, vr = m.k * (200 - m.pwm_stop), m.k * (100 - m.pwm_stop)
+    R = Geometry().track_width / 2 * (vl + vr) / (vl - vr)            # радиус дуги середины оси
+    v, w = tr.speed_at(2.5)
+    assert v / abs(w) == pytest.approx(R, rel=0.01)
+
+
+def test_brake_until_still_with_slow_motor():
+    slow = Motor(tau=0.3)
+    run = model.simulate(LINE, (0.0, 0.0, 0.0), t_end=1.5, motor=slow)
+    stop = model.brake(LINE, run, motor=slow)
+    assert stop.t[-1] > 0.8                                           # раньше обрезалось на 0.8 с
+    assert stop.speed_at(stop.t[-1])[0] < 5
+
+
+def test_speed_at_matches_wheels():
+    run = model.simulate(LINE, (0.0, 0.0, 0.0), t_end=1.0)
+    v, w = run.speed_at(0.9)
+    assert v == pytest.approx((run.vL[-1] + run.vR[-1]) / 2, rel=0.01) and abs(w) < 1e-3

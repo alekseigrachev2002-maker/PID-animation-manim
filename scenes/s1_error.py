@@ -13,21 +13,30 @@ from track import Route, Track  # noqa: E402
 from visuals.panel import ERR, GraphPanel, Signal  # noqa: E402
 
 
-def swing(amp_deg, period, cycles, dt=0.005):
-    """Качание ψ(t) = A·sin(2πt/T): сначала влево."""
-    t = np.arange(0, cycles * period + dt / 2, dt)
-    return t, np.radians(amp_deg) * np.sin(2 * np.pi * t / period)
+def swing(amp_deg, period, cycles, ramp=0.3, dt=0.005):
+    """Качание ψ = A·sin(2π·u/T), начинается и кончается в покое.
+
+    «Внутреннее время» u разгоняется от 0 до темпа часов за ramp секунд и так же тормозит в конце, поэтому
+    все размахи полные, а скорость поворота в начале и в конце нулевая. Длительность — cycles·T + ramp.
+    """
+    T_u = cycles * period
+    T = T_u + ramp
+    t = np.arange(0, T + dt / 2, dt)
+    u = np.where(t < ramp, t ** 2 / (2 * ramp),
+                 np.where(t > T - ramp, T_u - (T - t) ** 2 / (2 * ramp), t - ramp / 2))
+    return t, np.radians(amp_deg) * np.sin(2 * np.pi * u / period)
 
 
 class Scene1(PIDScene):
     amp_deg = 15.0     # амплитуда качания
     period = 2.0       # период качания, с
+    ramp = 0.3         # плавный старт и остановка качания, с
     speed = 0.5        # проигрывание вдвое медленнее
 
     def construct(self):
         st, sens = self.st, self.sensor
         track = Track(Route(start=(0, -300), heading="вверх").forward(3300))
-        t, psi = swing(self.amp_deg, self.period, 2)
+        t, psi = swing(self.amp_deg, self.period, 2, self.ramp)
         self.show(track, model.prescribed(track, t, 0.0, 0.0, psi, sensor=sens))
 
         a0, a1 = model.channel_sides(sens)
@@ -46,7 +55,7 @@ class Scene1(PIDScene):
         self.wait(0.5)
 
         # 1. одно качание: L и R
-        self.advance(self.period)
+        self.advance(self.period + self.ramp / 2)      # конец первого качания
 
         # 2. L, R бледнеют, шкала ±1023, появляется err
         e_end = ValueTracker(0.0)
@@ -61,7 +70,7 @@ class Scene1(PIDScene):
 
         # 3. ещё одно качание
         self.play(panel.set_caption("err = 0, пока оба на белом"), run_time=0.8)
-        self.advance(2 * self.period)
+        self.advance(self.traj.t[-1])
         self.wait(1.5)
 
 
