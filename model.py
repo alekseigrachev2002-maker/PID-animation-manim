@@ -204,10 +204,12 @@ def _wheel_step(s, moving, cmd, t0, dt, motor: Motor, geom: Geometry):
 
 
 def simulate(track, pose0, ctrl=Controller(), t_end=5.0, geom=Geometry(), sensor=Sensor(),
-             motor=Motor(), v0=0.0, seed=0, lost_dist=100.0):
+             motor=Motor(), v0=0.0, seed=0, lost_dist=100.0, stop_below=None):
     """Езда по трассе. v0 — начальная скорость колёс (по умолчанию робот стоит и трогается сам).
 
     Останавливается, если середина оси дальше lost_dist от всех линий.
+    stop_below — порог перекрёстка: на тике, где L и R оба ниже него, регулятор не вызывается и траектория
+    кончается (как в скетче: if (L < порог && R < порог) motors(0, 0); else followLine();) — дальше brake().
     """
     rng = np.random.default_rng(seed)
     s = np.array([*pose0, v0, v0, 0.0, 0.0])
@@ -220,6 +222,8 @@ def simulate(track, pose0, ctrl=Controller(), t_end=5.0, geom=Geometry(), sensor
     for k in range(int(round(t_end / ctrl.period))):
         t0 = k * ctrl.period
         L, R = to_channels(read_sensors(track, s[:3], geom, sensor, rng), sensor)
+        if stop_below is not None and L < stop_below and R < stop_below:
+            break
         e = error(L, R, ctrl)
         e_old = e if e_old is None else e_old   # без рывка D на первом тике
         uP, uD = control_parts(e, e_old, ctrl)
@@ -234,14 +238,16 @@ def simulate(track, pose0, ctrl=Controller(), t_end=5.0, geom=Geometry(), sensor
     return _pack(np.hstack(cont), np.array(ticks), lost_at)
 
 
-def _commanded(track, s, moving, cmd, t_on, ctrl, geom, sensor, motor, stop=False, t_guard=30.0):
+def _commanded(track, s, moving, cmd, t_on, ctrl, geom, sensor, motor, stop=False, t_guard=30.0, pending=None):
     """Езда без регулятора: команды ШИМ колёсам cmd(t) → (левое, правое) пока t < t_on.
 
     stop: затем motors(0, 0), пока оба колеса не встанут — в той же траектории (график видит и стоп).
-    До старта в очереди задержки — нули: команды начинают действовать через Motor.delay.
+    pending — команды, ещё идущие по очереди задержки; по умолчанию нули (робот стоял):
+    новые команды начинают действовать через Motor.delay.
     """
     cont, ticks = [], []
-    lag = deque([(0.0, 0.0)] * int(round(motor.delay / ctrl.period)))
+    n = int(round(motor.delay / ctrl.period))
+    lag = deque(pending if pending is not None else [(0.0, 0.0)] * n)
     k = 0
     while True:
         t0 = k * ctrl.period
@@ -265,10 +271,14 @@ def brake(track, traj, ctrl=Controller(), geom=Geometry(), sensor=Sensor(), moto
     """Остановка после прогона: motors(0, 0), робот докатывается, пока колёса не встанут.
 
     Стартует из конца траектории traj с теми же скоростями колёс; путь колёс продолжается.
+    Последние команды регулятора ещё в очереди задержки — колёса узнают о стопе через Motor.delay.
     """
     s = np.array([traj.x[-1], traj.y[-1], traj.psi[-1], traj.vL[-1], traj.vR[-1], traj.sL[-1], traj.sR[-1]])
     moving = [abs(s[3]) > motor.stop_eps, abs(s[4]) > motor.stop_eps]
-    return _commanded(track, s, moving, lambda t: (0, 0), 0.0, ctrl, geom, sensor, motor, stop=True)
+    n = int(round(motor.delay / ctrl.period))
+    pending = list(zip(traj.pwmL, traj.pwmR))[len(traj.tt) - n:] if n else []
+    return _commanded(track, s, moving, lambda t: (0, 0), 0.0, ctrl, geom, sensor, motor, stop=True,
+                      pending=pending)
 
 
 def drive(track, pose0, pwm, t_on, stop=False, ctrl=Controller(), geom=Geometry(), sensor=Sensor(), motor=Motor()):
@@ -322,6 +332,27 @@ def prescribed(track, t, x, y, psi, geom=Geometry(), sensor=Sensor(), ctrl=Contr
     cont = np.vstack([t, x, y, psi, z, z, ds - turn, ds + turn])
     ticks = np.column_stack([t, LR[:, 0], LR[:, 1], e, z, z, z, z])
     return _pack(cont, ticks, np.nan)
+
+
+def chain(*trajs):
+    """Склеить отрезки в одну траекторию: время и путь колёс каждого продолжают предыдущий.
+
+    Для графика через всю сцену (стоит → переставили → едет → стоп). Стык — в покое или run → brake.
+    """
+    out = {f.name: [] for f in fields(Trajectory) if f.name != "lost_at"}
+    t0, s0 = 0.0, np.zeros(2)
+    for i, tr in enumerate(trajs):
+        skip = 1 if i > 0 else 0                  # первая точка отрезка = последняя предыдущего
+        for k in ("x", "y", "psi", "vL", "vR"):
+            out[k].append(getattr(tr, k)[skip:])
+        out["t"].append(tr.t[skip:] + t0)
+        out["sL"].append(tr.sL[skip:] - tr.sL[0] + s0[0])
+        out["sR"].append(tr.sR[skip:] - tr.sR[0] + s0[1])
+        out["tt"].append(tr.tt + t0)
+        for k in ("L", "R", "e", "uP", "uD", "pwmL", "pwmR"):
+            out[k].append(getattr(tr, k))
+        t0, s0 = out["t"][-1][-1], np.array([out["sL"][-1][-1], out["sR"][-1][-1]])
+    return Trajectory(**{k: np.concatenate(v) for k, v in out.items()})
 
 
 def _pack(cont, ticks, lost_at):

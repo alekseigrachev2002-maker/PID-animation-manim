@@ -230,3 +230,40 @@ def test_drive_ramp_then_stop():
     assert tr.pwmL.max() == pytest.approx(255 * (0.6 - 0.005) / 0.6, rel=0.01)   # команда — лесенка по тактам
     assert tr.y[np.searchsorted(tr.t, tr.tt[i67])] == pytest.approx(0, abs=1e-6)  # до порога трогания стоит
     assert tr.pwmL[-1] == 0 and tr.speed_at(tr.t[-1])[0] < 5                     # потом стоп и докатился
+
+
+# ---------- перекрёсток (сцена 3) ----------
+
+CROSS = track.Track(track.Route(start=(0, -100), heading="вверх").forward(600),
+                    track.Route(start=(-150, 300), heading="вправо").forward(300))
+
+
+def test_stop_below_ends_on_crossing():
+    """Траектория кончается на первом тике, где L и R оба ниже порога; до этого — нет."""
+    run = model.simulate(CROSS, (0.0, 0.0, 0.0), t_end=3.0, stop_below=300)
+    assert run.t[-1] < 2.9
+    assert np.all((run.L >= 300) | (run.R >= 300))
+    L, R = model.read_sensors(CROSS, (run.x[-1], run.y[-1], run.psi[-1]), G, S)
+    assert max(L, R) < 300
+    assert abs(run.y[-1] + G.sensor_y - 300) < 15           # датчики на полосе перекрёстка
+
+
+def test_brake_waits_for_delay():
+    """Стоп доходит до колёс через Motor.delay: первые delay секунд робот едет, как ехал."""
+    m = Motor(delay=0.02)
+    run = model.simulate(LINE, (0.0, 0.0, 0.0), t_end=0.5, motor=m)
+    stop = model.brake(LINE, run, motor=m)
+    v = (stop.vL + stop.vR) / 2
+    k = np.searchsorted(stop.t, 0.02)
+    assert v[k] == pytest.approx(v[0], rel=0.02)
+    assert stop.y[-1] - stop.y[0] > model.brake(LINE, run).y[-1] - run.y[-1] + 3   # прокат длиннее, чем без задержки
+
+
+def test_chain_continues_time_and_wheel_path():
+    a = model.drive(LINE, (0.0, 0.0, 0.0), (150, 150), 0.3, stop=True)
+    b = model.drive(LINE, (a.x[-1], a.y[-1], a.psi[-1]), (150, 150), 0.3, stop=True)
+    ab = model.chain(a, b)
+    assert ab.t[-1] == pytest.approx(a.t[-1] + b.t[-1])
+    assert np.all(np.diff(ab.t) > 0)
+    assert ab.sL[-1] == pytest.approx(a.sL[-1] + b.sL[-1] - b.sL[0])
+    assert len(ab.tt) == len(a.tt) + len(b.tt)
