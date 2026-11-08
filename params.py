@@ -63,6 +63,7 @@ class Controller:
     balance: float = 1.0        # sensorBalance
     period: float = 0.010       # период регулятора, с: в скетче delay(10) в loop(); остальное в цикле ≪ 10 мс
     pwm_limit: float = 255.0
+    threshold: float = 300.0    # порог перекрёстка (урок 3, #define TRESHOLD 300): L и R оба ниже — перекрёсток
 
 
 @dataclass(frozen=True)

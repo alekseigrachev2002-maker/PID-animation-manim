@@ -1,7 +1,7 @@
-"""Сцена 3. Перекрёсток: L и R оба ниже порога → стоп.
+"""Сцена 3. Перекрёсток: L и R оба ниже порога → стоп. Показываем, как видят перекрёсток датчики.
 
-Поле 1 без жёлтых квадратов, низ первой вертикали (x = 601.7): ниже её конца — белое, выше — перекрёсток
-с горизонталью y = 300. Робот стоит на белом, повёрнутый налево; его переставляют «рукой» на линию
+Поле 1 без жёлтых квадратов, то же место, что в сцене 0: вертикаль x = 601.7 под центральным перекрёстком
+(горизонталь y = 750). Робот стоит у линии, повёрнутый налево, датчики на белом; его переставляют «рукой» на линию
 (линия подъезжает, поворот на месте — правый датчик проходит над линией: один тёмный — ещё не перекрёсток);
 он едет по линии регулятором из сцены 2 и на тике, где оба датчика ниже порога, — motors(0, 0) и докатывается.
 График L и R — через всю сцену, вместе с «рукой». Камера едет за роботом.
@@ -20,13 +20,13 @@ from scenes.base import PIDScene, render  # noqa: E402
 from track import Track, field1  # noqa: E402
 from visuals.panel import GraphPanel, Signal  # noqa: E402
 
-X_LINE = 601.7                              # первая вертикаль поля 1, низ — y = 150.1, перекрёсток — y = 300.1
+X_LINE = 601.7                              # вертикаль поля 1 из сцены 0; центральный перекрёсток — y = 750
 
 
 class Scene3(PIDScene):
-    threshold = 300                          # #define TRESHOLD 300
-    stand = (650.0, 40.0, np.radians(90))   # стоит на белом, повёрнут налево; датчики далеко от конца линии
-    place = (X_LINE, 80.0, 0.0)             # куда ставят: на линию, вверх
+    # стоит левее линии, повёрнут налево: датчики на белом; «рука» сдвигает его вправо — датчики линию не пересекают
+    stand = (560.0, 470.0, np.radians(90))
+    place = (X_LINE, 500.0, 0.0)            # куда ставят: на линию, вверх; до перекрёстка датчикам ~140 мм
     ctrl = dict(kp=0.045, kd=0.5)           # регулятор из сцены 2
     delay = 0.020                           # как в сценах 2
     t_stand = 0.6                           # стоит на белом, с
@@ -43,7 +43,7 @@ class Scene3(PIDScene):
         slide = model.move(track, (x, y, psi), (tx, ty, psi), self.t_slide, roll=False, geom=g, sensor=s)
         turn = model.move(track, (tx, ty, psi), (tx, ty, tpsi), self.t_turn, geom=g, sensor=s)
         run = model.cached_simulate(track, self.place, ctrl=Controller(**self.ctrl), motor=m, t_end=3.0,
-                                    stop_below=self.threshold)
+                                    stop_below=Controller().threshold)
         stop = model.brake(track, run, geom=g, sensor=s, motor=m)
         return [stand, slide, turn, run, stop]
 
@@ -59,10 +59,10 @@ class Scene3(PIDScene):
         L, R = Signal(f"L — {a0} датчик, A0", "L", "L"), Signal(f"R — {a1} датчик, A1", "R", "R")
         panel = GraphPanel(self.fr, st, "Перекрёсток", "датчики на белом", y=("АЦП", 0, 1023),
                            t_max=traj.t[-1] * 1.08, t_ticks=range(int(traj.t[-1]) + 1), signals=[L, R])
-        limit = panel.plot.hline(self.threshold, f"порог {self.threshold}", ValueTracker(1.0))
+        trs = Controller().threshold
+        limit = panel.plot.hline(trs, f"threshold = {trs:g}", ValueTracker(1.0))
         self.add(panel, limit, *panel.curves(traj, self.t))
-        self.play(panel.set_formula(f"L < {self.threshold} && R < {self.threshold}", [("L", "L"), ("R", "R")]),
-                  run_time=0.8)
+        self.play(panel.set_formula("L < threshold && R < threshold", [("L", "L"), ("R", "R")]), run_time=0.8)
 
         self.advance(ends[0], speed=1.0)
         self.play(panel.set_caption("ставим на линию"), run_time=0.6)
@@ -70,7 +70,7 @@ class Scene3(PIDScene):
         self.play(panel.set_caption("едем по линии"), run_time=0.6)
         self.advance(ends[3])
         # стоп: подпись меняется в начале докатывания (0.6 с на экране) — время не замирает на ходу
-        self.advance(ends[3] + 0.6 * self.speed, panel.set_caption(f"оба ниже {self.threshold}: стоп"))
+        self.advance(ends[3] + 0.6 * self.speed, panel.set_caption("оба ниже порога: стоп"))
         self.advance(ends[4])
         self.wait(1.5)
 
