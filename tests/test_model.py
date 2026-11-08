@@ -155,3 +155,19 @@ def test_path_left_turn_radius():
     ln = track.Track(track.Route(heading="вверх").left(R=80)).lines[0]
     assert np.hypot(*(ln.points - [-80, 0]).T) == pytest.approx(np.full(len(ln.points), 80), abs=1e-6)
     assert ln.points[-1] == pytest.approx([-80, 80], abs=1e-6)
+
+
+def test_start_from_rest_accelerates():
+    traj = model.simulate(LINE, (0.0, 0.0, 0.0), t_end=0.5)
+    v = (traj.vL + traj.vR) / 2
+    assert v[0] == 0 and v[-1] == pytest.approx(Motor().v_at_150, rel=0.02)
+    assert np.all(np.diff(v) >= -1e-9)                       # разгон без скачков
+
+
+def test_brake_stops_smoothly():
+    run = model.simulate(LINE, (0.0, 0.0, 0.0), t_end=0.5)
+    stop = model.brake(LINE, run)
+    v = (stop.vL + stop.vR) / 2
+    assert v[0] == pytest.approx((run.vL[-1] + run.vR[-1]) / 2, rel=1e-3)   # без скачка скорости
+    assert v[-1] < 2 and stop.y[-1] > run.y[-1]                               # докатился и встал
+    assert stop.sL[0] == pytest.approx(run.sL[-1])

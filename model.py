@@ -180,23 +180,35 @@ class Trajectory:
                       for f in fields(cls)})
 
 
+def _wheel_step(s, moving, cmd, t0, dt, motor: Motor, geom: Geometry):
+    """Один такт с командами ШИМ cmd = (левое, правое): обновить «стоит/крутится» и проинтегрировать движение.
+    Возвращает (состояние в конце такта, флаги, кусок непрерывной траектории с шагом GRID)."""
+    moving = [update_moving(m, v, p, motor) for m, v, p in zip(moving, s[3:5], cmd)]
+    s = s.copy()
+    s[3] = s[3] if moving[0] else 0.0
+    s[4] = s[4] if moving[1] else 0.0
+    vt = (wheel_target(cmd[0], moving[0], motor), wheel_target(cmd[1], moving[1], motor))
+    sol = solve_ivp(rhs, (t0, t0 + dt), s, args=(*vt, motor.tau, geom.track_width),
+                    dense_output=True, rtol=1e-8, atol=1e-8)
+    tg = t0 + GRID * np.arange(int(round(dt / GRID)))
+    return sol.y[:, -1].copy(), moving, np.vstack([tg, sol.sol(tg)])
+
+
 def simulate(track, pose0, ctrl=Controller(), t_end=5.0, geom=Geometry(), sensor=Sensor(),
-             motor=Motor(), v0=None, seed=0, lost_dist=100.0):
-    """Езда по трассе. v0 — начальная скорость колёс (по умолчанию установившаяся при speed).
+             motor=Motor(), v0=0.0, seed=0, lost_dist=100.0):
+    """Езда по трассе. v0 — начальная скорость колёс (по умолчанию робот стоит и трогается сам).
 
     Останавливается, если середина оси дальше lost_dist от всех линий.
     """
     rng = np.random.default_rng(seed)
-    if v0 is None:
-        v0 = wheel_target(ctrl.speed, True, motor)
     s = np.array([*pose0, v0, v0, 0.0, 0.0])
     moving = [v0 != 0, v0 != 0]
-    n_ticks = int(round(t_end / ctrl.period))
-    per_tick = int(round(ctrl.period / GRID))
     cont, ticks = [], []
     e_old, lost_at = None, np.nan
-    lag = deque([(ctrl.speed, ctrl.speed)] * int(round(motor.delay / ctrl.period)))
-    for k in range(n_ticks):
+    # команды, отданные до старта: стоящему роботу — нули, едущему — прямо
+    prior = (ctrl.speed, ctrl.speed) if v0 else (0.0, 0.0)
+    lag = deque([prior] * int(round(motor.delay / ctrl.period)))
+    for k in range(int(round(t_end / ctrl.period))):
         t0 = k * ctrl.period
         L, R = to_channels(read_sensors(track, s[:3], geom, sensor, rng), sensor)
         e = error(L, R, ctrl)
@@ -204,21 +216,32 @@ def simulate(track, pose0, ctrl=Controller(), t_end=5.0, geom=Geometry(), sensor
         uP, uD = control_parts(e, e_old, ctrl)
         pL, pR = wheel_pwm(uP + uD, ctrl, motor)
         e_old = e
-        aL, aR = delayed(lag, (pL, pR))
-        moving = [update_moving(m, v, p, motor) for m, v, p in zip(moving, s[3:5], (aL, aR))]
-        s[3] = s[3] if moving[0] else 0.0
-        s[4] = s[4] if moving[1] else 0.0
-        vt = (wheel_target(aL, moving[0], motor), wheel_target(aR, moving[1], motor))
-        sol = solve_ivp(rhs, (t0, t0 + ctrl.period), s, args=(*vt, motor.tau, geom.track_width),
-                        dense_output=True, rtol=1e-8, atol=1e-8)
-        tg = t0 + GRID * np.arange(per_tick)
-        cont.append(np.vstack([tg, sol.sol(tg)]))
+        s, moving, chunk = _wheel_step(s, moving, delayed(lag, (pL, pR)), t0, ctrl.period, motor, geom)
+        cont.append(chunk)
         ticks.append((t0, L, R, e, uP, uD, pL, pR))
-        s = sol.y[:, -1].copy()
         if min(d.min() for d in track.distances(s[None, :2])) > lost_dist:
             lost_at = t0 + ctrl.period
             break
     return _pack(np.hstack(cont), np.array(ticks), lost_at)
+
+
+def brake(track, traj, ctrl=Controller(), geom=Geometry(), sensor=Sensor(), motor=Motor(), t_max=0.8):
+    """Остановка после прогона: motors(0, 0), робот докатывается, пока колёса не встанут (или t_max).
+
+    Стартует из конца траектории traj; путь колёс продолжается с того же значения.
+    """
+    s = np.array([traj.x[-1], traj.y[-1], traj.psi[-1], traj.vL[-1], traj.vR[-1], traj.sL[-1], traj.sR[-1]])
+    moving = [abs(s[3]) > motor.stop_eps, abs(s[4]) > motor.stop_eps]
+    cont, ticks = [], []
+    for k in range(int(round(t_max / ctrl.period))):
+        t0 = k * ctrl.period
+        L, R = to_channels(read_sensors(track, s[:3], geom, sensor), sensor)
+        s, moving, chunk = _wheel_step(s, moving, (0.0, 0.0), t0, ctrl.period, motor, geom)
+        cont.append(chunk)
+        ticks.append((t0, L, R, error(L, R, ctrl), 0.0, 0.0, 0.0, 0.0))
+        if not any(moving):
+            break
+    return _pack(np.hstack(cont), np.array(ticks), np.nan)
 
 
 def off_line(track, pose, geom=Geometry(), sensor=Sensor(), seen=0.02):

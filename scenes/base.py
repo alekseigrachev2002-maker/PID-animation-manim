@@ -149,16 +149,36 @@ class RunSeries(PIDScene):
                 self.return_to(target, self.t_slide, self.t_turn)
                 self.switch(self.simulate(target, ctrl))
                 self.play(readout.opacity.animate.set_value(1.0), run_time=0.4)
-            curves = panel.curves(self.traj, self.t)
+            clock = RunClock(self.t)            # кривые растут за t во время прогона и замирают на его конце
+            curves = panel.curves(self.traj, clock)
             self.add(curves)
             self.wait(0.3)
             self.advance(self.traj.t[-1])
-            self.wait(0.8)
+            clock.stop()
+            # стоп: motors(0, 0), робот докатывается по той же физике; строка ШИМ приглушается — регулятор выключен
+            self.switch(model.brake(self.track, self.traj, geom=self.geom, sensor=self.sensor,
+                                    motor=Motor(delay=self.delay)))
+            self.advance(self.traj.t[-1], readout.opacity.animate.set_value(0.35))
+            self.wait(0.5)
             if i < len(self.runs) - 1:
-                # стоп: кривые гаснут, числа ШИМ приглушаются, в шапке — следующий прогон
-                self.play(FadeOut(curves), readout.opacity.animate.set_value(0.35),
-                          panel.set_caption(self.runs[i + 1][1]), run_time=0.8)
+                # кривые гаснут, в шапке — следующий прогон
+                self.play(FadeOut(curves), panel.set_caption(self.runs[i + 1][1]), run_time=0.8)
         self.wait(1.0)
+
+
+class RunClock:
+    """Время для кривых прогона: идёт за трекером t, после stop() замирает (дальше t перезапускается)."""
+
+    def __init__(self, t):
+        self.t, self.live, self.value = t, True, 0.0
+
+    def stop(self):
+        self.live = False
+
+    def __call__(self):
+        if self.live:
+            self.value = self.t.get_value()
+        return self.value
 
 
 def render(scene_cls, quality="low_quality", still=False, preview=True):
