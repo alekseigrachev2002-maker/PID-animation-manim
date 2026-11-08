@@ -1,13 +1,16 @@
-"""Робот сверху. Строится в мм (система робота: +y вперёд), на экран — через Frame (масштаб и точка оси)."""
-import numpy as np
-import math
+"""Робот сверху. Строится в мм (система робота: +y вперёд); на экран ставится методом place().
 
-from manim import UL, WHITE, Arc, interpolate_color, ManimColor, Circle, Difference, Rectangle, RoundedRectangle, Union, VGroup, VMobject
+Части: колёса с протектором, оси (цвет стороны), шасси, платы датчиков с метками (флажок sensors).
+Оптопара TCRT стоит на нижней стороне платы и сверху не видна — не рисуем.
+"""
+import numpy as np
+from manim import WHITE, Circle, Difference, ManimColor, Rectangle, RoundedRectangle, Union, VGroup, VMobject, \
+    interpolate_color
 
 from params import Geometry, Sensor, Style
 
 HALO_R = (11.0, 8.0, 5.5)   # ореол метки: круги внахлёст, к краю свечение слабее
-N_TREAD = 18          # шевронов ёлочки по окружности колеса
+N_TREAD = 18                # шевронов ёлочки по окружности колеса
 Z = dict(wheel=1, tread=2, axle=2.5, board=3, chassis=4, marker=5)
 
 
@@ -17,18 +20,11 @@ def _rect(w, h, cx, cy, r=0.0, **kw):
 
 
 def chassis(g: Geometry, st: Style, edge_w):
-    """Шасси: круг с вырезами под колёса. Глянец — VGroup(корпус, блик), мат — VGroup(корпус)."""
+    """Шасси: круг с вырезами под колёса."""
     x0, x1 = g.cutout_x
     cuts = [_rect(x1 - x0, g.cutout_h, s * (x0 + x1) / 2, 0, g.cutout_r) for s in (-1, 1)]
     body = Difference(Circle(radius=g.chassis_r), Union(*cuts))
-    body.set_stroke(color=st.chassis_edge, width=edge_w)
-    if st.chassis_finish == "flat":
-        return VGroup(body.set_fill(color=st.chassis_flat, opacity=st.chassis_opacity))
-    body.set_fill(color=[st.chassis, st.chassis_hi], opacity=st.chassis_opacity).set_sheen_direction(UL)
-    # блик глянца: дуга у края сверху слева; при повороте робота стоит на месте (свет неподвижен)
-    glare = Arc(radius=g.chassis_r - 7, start_angle=math.radians(105), angle=math.radians(50))
-    glare.set_stroke(color=st.glare, width=4 * edge_w, opacity=st.glare_opacity)
-    return VGroup(body, glare)
+    return body.set_fill(st.chassis, 1).set_stroke(st.chassis_edge, edge_w)
 
 
 def wheels(g: Geometry, st: Style):
@@ -36,20 +32,19 @@ def wheels(g: Geometry, st: Style):
                           stroke_width=0) for s in (-1, 1)])
 
 
+def axles(g: Geometry, st: Style):
+    """Видимые оси: от края выреза в акриле до внутренней стороны колеса; цвет — сторона робота."""
+    x0, x1 = g.cutout_x[0], g.wheel_x - g.wheel_w / 2
+    return VGroup(*[_rect(x1 - x0, g.axle_w, s * (x0 + x1) / 2, 0, fill_color=c, fill_opacity=1, stroke_width=0)
+                    for s, c in ((-1, st.L), (1, st.R))])
+
+
 def board_colors(st: Style, sensor: Sensor):
     """Цвета плат [левая, правая] = цвет сигнала, который с неё идёт (L на A0, R на A1)."""
     return (st.R, st.L) if sensor.swapped else (st.L, st.R)
 
 
-def axles(g: Geometry, st: Style):
-    """Видимые оси: от края выреза в акриле до внутренней стороны колеса; цвет — сторона робота."""
-    x0 = g.cutout_x[0]
-    x1 = g.wheel_x - g.wheel_w / 2
-    return VGroup(*[_rect(x1 - x0, g.axle_w, s * (x0 + x1) / 2, 0, fill_color=c, fill_opacity=1, stroke_width=0)
-                    for s, c in ((-1, st.L), (1, st.R))])
-
-
-def boards(g: Geometry, st: Style, sensor: Sensor = Sensor()):
+def boards(g: Geometry, st: Style, sensor: Sensor):
     front = g.mount_y + g.board_front_to_mount
     out = VGroup()
     for s, color in zip((-1, 1), board_colors(st, sensor)):
@@ -61,7 +56,7 @@ def boards(g: Geometry, st: Style, sensor: Sensor = Sensor()):
     return out
 
 
-def markers(g: Geometry, st: Style, sensor: Sensor = Sensor()):
+def markers(g: Geometry, st: Style, sensor: Sensor):
     """Метки оптического центра на платах [левая, правая]: ореол цвета сигнала и ядро."""
     out = VGroup()
     for s, color in zip((-1, 1), board_colors(st, sensor)):
@@ -91,28 +86,26 @@ def tread_points(g: Geometry, side, phase):
         phi = phase + 2 * np.pi * k / N_TREAD
         c, y = np.cos(phi), R * np.sin(phi)
         vis = max(c, 0.0) if abs(y) < R - 2.5 else 0.0
-        pts = np.array([[xc - hw, y - 2.2], [xc, y + 1.0], [xc + hw, y - 2.2]])
-        out.append((pts, vis))
+        out.append((np.array([[xc - hw, y - 2.2], [xc, y + 1.0], [xc + hw, y - 2.2]]), vis))
     return out
 
 
 class Robot(VGroup):
-    """Робот на экране: середина оси колёс в fr.anchor. set_pose(psi), set_wheel_phase(sL, sR)."""
+    """place(точка экрана, ψ) — поставить середину оси в точку и повернуть; set_wheel_phase, set_signals."""
 
-    def __init__(self, fr, geom=Geometry(), st=Style(), sensor=Sensor()):
+    def __init__(self, fr, geom=Geometry(), st=Style(), sensor=Sensor(), sensors=True):
         super().__init__()
         self.fr, self.geom, self.st, self.sensor = fr, geom, st, sensor
-        self.psi = 0.0
+        self.pos, self.psi = fr.anchor.copy(), 0.0
         self.treads = VGroup(*[VMobject(stroke_color=st.tread) for _ in range(2 * N_TREAD)])
-        # оптопара TCRT стоит на нижней стороне платы и сверху не видна — не рисуем
-        self.markers = markers(geom, st, sensor)
-        parts = dict(wheel=wheels(geom, st), tread=self.treads, axle=axles(geom, st), board=boards(geom, st, sensor),
-                     chassis=chassis(geom, st, fr.stroke(1.2)), marker=self.markers)
-        self.body = parts["chassis"][0]
-        self.glare = parts["chassis"][1] if len(parts["chassis"]) > 1 else None
+        self.markers = markers(geom, st, sensor) if sensors else VGroup()
+        parts = dict(wheel=wheels(geom, st), tread=self.treads, axle=axles(geom, st),
+                     chassis=chassis(geom, st, fr.stroke(1.2)))
+        if sensors:
+            parts.update(board=boards(geom, st, sensor), marker=self.markers)
         for name, m in parts.items():
             if name != "tread":
-                m.scale(fr.mm, about_point=np.zeros(3)).shift(fr.anchor)
+                m.scale(fr.mm, about_point=np.zeros(3)).shift(self.pos)
             m.set_z_index(Z[name])
             self.add(m)
         self.set_wheel_phase(0.0, 0.0)
@@ -120,15 +113,13 @@ class Robot(VGroup):
     def _to_screen(self, pts_mm):
         c, s = np.cos(self.psi), np.sin(self.psi)
         p = np.asarray(pts_mm) @ np.array([[c, s], [-s, c]]) * self.fr.mm
-        return np.column_stack([p, np.zeros(len(p))]) + self.fr.anchor
+        return np.column_stack([p, np.zeros(len(p))]) + self.pos
 
-    def set_pose(self, psi):
-        d = psi - self.psi
-        self.rotate(d, about_point=self.fr.anchor)
-        if self.glare is not None:   # свет неподвижен: блик и градиент не вращаются с роботом
-            self.glare.rotate(-d, about_point=self.fr.anchor)
-            self.body.set_sheen_direction(UL)
-        self.psi = psi
+    def place(self, point, psi):
+        point = np.asarray(point, float)
+        self.shift(point - self.pos)
+        self.rotate(psi - self.psi, about_point=point)
+        self.pos, self.psi = point, psi
         return self
 
     def set_signals(self, lv_left, lv_right):

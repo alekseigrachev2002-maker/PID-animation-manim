@@ -1,32 +1,81 @@
-"""Трассы: осевые линии и расстояние до них. Без Manim.
+"""Трасса: осевые линии, расстояние до них и конструктор. Без Manim.
 
-Трасса — набор осевых линий (ломаных). Осевые нужны и визуалу,
-поэтому хранятся как массивы точек (N, 2) в мм.
+Трасса строится «черепашкой»: старт, курс, затем прямые и повороты.
+
+    track = Track(
+        Route(start=(0, -1500), heading="вверх").forward(1500).mark("поворот").right(R=100).forward(1500),
+        Route(start=(-600, 400), heading="вправо").forward(1200),        # поперечная линия перекрёстка
+    )
+    start = track.pose("поворот", -350)                                  # поза робота за 350 мм до поворота
+
+Внутри осевая — ломаная с шагом 0.5 мм; радиус поворота существует только при построении.
 """
-from dataclasses import dataclass, field
-
 import numpy as np
 from scipy.spatial import cKDTree
 
 STEP = 0.5  # шаг дискретизации осевой, мм
 
+# курс ψ отсчитывается от +y против часовой стрелки (как у робота)
+HEADINGS = {"вверх": 0.0, "влево": 90.0, "вниз": 180.0, "вправо": -90.0}
 
-@dataclass
+
+class Route:
+    """Одна линия трассы, собранная командами forward / right / left."""
+
+    def __init__(self, start=(0.0, 0.0), heading="вверх"):
+        self.pts = [np.asarray(start, float)]
+        self.psi = np.radians(HEADINGS.get(heading, heading))
+        self.marks = {}
+
+    def _dir(self):
+        return np.array([-np.sin(self.psi), np.cos(self.psi)])
+
+    def forward(self, length):
+        n = max(int(np.ceil(length / STEP)), 1)
+        p0 = self.pts[-1]
+        self.pts += [p0 + self._dir() * s for s in np.linspace(0, length, n + 1)[1:]]
+        return self
+
+    def _turn(self, R, angle_deg, side):
+        """side = +1 — направо (по часовой), −1 — налево."""
+        p0, a = self.pts[-1], np.radians(angle_deg)
+        right = np.array([np.cos(self.psi), np.sin(self.psi)])     # нормаль вправо от курса
+        c = p0 + side * R * right
+        n = max(int(np.ceil(a * R / STEP)), 1)
+        for th in np.linspace(0, a, n + 1)[1:]:
+            rot = -side * th                                      # направо — вращение по часовой
+            v = p0 - c
+            self.pts.append(c + np.array([v[0] * np.cos(rot) - v[1] * np.sin(rot),
+                                          v[0] * np.sin(rot) + v[1] * np.cos(rot)]))
+        self.psi -= side * a
+        return self
+
+    def right(self, R, angle=90):
+        return self._turn(R, angle, +1)
+
+    def left(self, R, angle=90):
+        return self._turn(R, angle, -1)
+
+    def mark(self, name):
+        """Запомнить текущую точку линии под именем (например, начало поворота)."""
+        self.marks[name] = len(self.pts) - 1
+        return self
+
+
 class Line:
-    points: np.ndarray
-    closed: bool = False
-    _tree: cKDTree = field(init=False, repr=False)
+    """Осевая линия: ломаная (N, 2) в мм."""
 
-    def __post_init__(self):
-        self.points = np.asarray(self.points, dtype=float)
+    def __init__(self, points, marks=None):
+        self.points = np.asarray(points, float)
+        self.s = np.concatenate([[0], np.cumsum(np.linalg.norm(np.diff(self.points, axis=0), axis=1))])
+        self.marks = {k: self.s[i] for k, i in (marks or {}).items()}   # имя → длина вдоль линии, мм
         self._tree = cKDTree(self.points)
 
     def _nearest(self, flat):
         """Ближайший отрезок осевой для каждой точки: (начало, конец, расстояние)."""
         _, i = self._tree.query(flat)
         n = len(self.points)
-        prev = (i - 1) % n if self.closed else np.maximum(i - 1, 0)
-        nxt = (i + 1) % n if self.closed else np.minimum(i + 1, n - 1)
+        prev, nxt = np.maximum(i - 1, 0), np.minimum(i + 1, n - 1)
         d1 = _seg_dist(flat, self.points[prev], self.points[i])
         d2 = _seg_dist(flat, self.points[i], self.points[nxt])
         first = d1 <= d2
@@ -35,7 +84,7 @@ class Line:
         return a, b, np.minimum(d1, d2)
 
     def distance(self, p) -> np.ndarray:
-        """Расстояние от точек p (..., 2) до осевой: ближайшая вершина + проекция на соседние отрезки."""
+        """Расстояние от точек p (..., 2) до осевой."""
         p = np.asarray(p, dtype=float)
         return self._nearest(p.reshape(-1, 2))[2].reshape(p.shape[:-1])
 
@@ -47,6 +96,14 @@ class Line:
         ab, ap = b - a, flat - a
         return np.sign(ab[:, 0] * ap[:, 1] - ab[:, 1] * ap[:, 0]).reshape(p.shape[:-1])
 
+    def pose_at(self, s):
+        """Поза (x, y, ψ) на линии на расстоянии s от её начала: точка и курс вдоль линии."""
+        i = int(np.clip(np.searchsorted(self.s, s), 1, len(self.s) - 1))
+        a, b = self.points[i - 1], self.points[i]
+        f = (s - self.s[i - 1]) / max(self.s[i] - self.s[i - 1], 1e-9)
+        x, y = a + (b - a) * f
+        return float(x), float(y), float(np.arctan2(-(b - a)[0], (b - a)[1]))
+
 
 def _seg_dist(p, a, b):
     ab = b - a
@@ -56,70 +113,18 @@ def _seg_dist(p, a, b):
     return np.linalg.norm(p - (a + t[:, None] * ab), axis=1)
 
 
-@dataclass
 class Track:
-    lines: list
+    """Трасса — набор линий. Принимает Route (собирается здесь) или готовые Line."""
+
+    def __init__(self, *items):
+        self.lines = [Line(np.array(it.pts), it.marks) if isinstance(it, Route) else it for it in items]
 
     def distances(self, p) -> list:
         return [ln.distance(p) for ln in self.lines]
 
-
-# ---------- формы ----------
-
-def _segment(a, b):
-    a, b = np.asarray(a, float), np.asarray(b, float)
-    n = max(int(np.ceil(np.linalg.norm(b - a) / STEP)), 1)
-    return a + np.linspace(0, 1, n, endpoint=False)[:, None] * (b - a)
-
-
-def _arc(c, r, a0, a1):
-    n = max(int(np.ceil(abs(a1 - a0) * r / STEP)), 1)
-    a = np.linspace(a0, a1, n, endpoint=False)
-    return np.column_stack([c[0] + r * np.cos(a), c[1] + r * np.sin(a)])
-
-
-def straight(y0=-300.0, y1=3000.0, x=0.0) -> Track:
-    """Вертикальная прямая вдоль +y."""
-    pts = np.vstack([_segment((x, y0), (x, y1)), [[x, y1]]])
-    return Track([Line(pts)])
-
-
-def rounded_rect(w, h, radii) -> Track:
-    """Прямоугольник w×h с центром в нуле, скругления radii = (ПВ, ЛВ, ЛН, ПН).
-
-    Обход против часовой стрелки (повороты влево), старт — середина правой стороны.
-    """
-    rTR, rTL, rBL, rBR = radii
-    X, Y = w / 2, h / 2
-    pi = np.pi
-    parts = [
-        _segment((X, 0), (X, Y - rTR)),
-        _arc((X - rTR, Y - rTR), rTR, 0, pi / 2),
-        _segment((X - rTR, Y), (-X + rTL, Y)),
-        _arc((-X + rTL, Y - rTL), rTL, pi / 2, pi),
-        _segment((-X, Y - rTL), (-X, -Y + rBL)),
-        _arc((-X + rBL, -Y + rBL), rBL, pi, 3 * pi / 2),
-        _segment((-X + rBL, -Y), (X - rBR, -Y)),
-        _arc((X - rBR, -Y + rBR), rBR, 3 * pi / 2, 2 * pi),
-        _segment((X, -Y + rBR), (X, 0)),
-    ]
-    return Track([Line(np.vstack(parts), closed=True)])
-
-
-def corner(R=100.0, before=500.0, after=800.0, turn="right") -> Track:
-    """Поворот буквой «Г»: прямая вверх до y = 0, дуга 90° радиуса R, прямая вбок."""
-    k = 1 if turn == "right" else -1
-    c = (k * R, 0.0)
-    a0 = np.pi if k > 0 else 0.0
-    parts = [_segment((0, -before), (0, 0)),
-             _arc(c, R, a0, a0 - k * np.pi / 2),
-             _segment((k * R, R), (k * (R + after), R)),
-             [[k * (R + after), R]]]
-    return Track([Line(np.vstack(parts))])
-
-
-def crossroad(y_cross=400.0, y0=-300.0, y1=3000.0, half=600.0) -> Track:
-    """Прямая вдоль +y и поперечная линия на y = y_cross."""
-    main = straight(y0, y1).lines[0]
-    cross = np.vstack([_segment((-half, y_cross), (half, y_cross)), [[half, y_cross]]])
-    return Track([main, Line(cross)])
+    def pose(self, mark, offset=0.0):
+        """Поза на линии со смещением offset (мм) от метки mark; offset < 0 — раньше метки."""
+        for ln in self.lines:
+            if mark in ln.marks:
+                return ln.pose_at(ln.marks[mark] + offset)
+        raise KeyError(mark)

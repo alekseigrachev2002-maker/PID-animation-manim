@@ -10,7 +10,7 @@ import track  # noqa: E402
 from params import Controller, Geometry, Motor, Sensor  # noqa: E402
 
 G, S, C = Geometry(), Sensor(), Controller()
-LINE = track.straight()
+LINE = track.Track(track.Route(start=(0, -300), heading="вверх").forward(3300))
 
 
 def e_at(x=0.0, psi_deg=0.0):
@@ -138,3 +138,20 @@ def test_wheel_signs_match_pwm():
         sl, sr = model.wheel_signs(m)
         pl, pr = model.wheel_pwm(40.0, C, m)
         assert (pl, pr) == (C.speed + sl * 40.0, C.speed + sr * 40.0)
+
+
+def test_path_right_turn_geometry():
+    tr = track.Track(track.Route(start=(0, -100), heading="вверх").forward(100).mark("поворот")
+                     .right(R=100).forward(50))
+    ln = tr.lines[0]
+    assert ln.points[-1] == pytest.approx([150, 100], abs=1e-6)       # дуга до (100, 100), затем 50 вправо
+    x, y, psi = ln.pose_at(ln.s[-1] - 1)
+    assert np.degrees(psi) == pytest.approx(-90, abs=1e-6)            # курс «вправо»
+    assert tr.pose("поворот") == pytest.approx((0, 0, 0), abs=1e-6)
+    assert tr.pose("поворот", -40) == pytest.approx((0, -40, 0), abs=1e-6)
+
+
+def test_path_left_turn_radius():
+    ln = track.Track(track.Route(heading="вверх").left(R=80)).lines[0]
+    assert np.hypot(*(ln.points - [-80, 0]).T) == pytest.approx(np.full(len(ln.points), 80), abs=1e-6)
+    assert ln.points[-1] == pytest.approx([-80, 80], abs=1e-6)

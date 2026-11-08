@@ -79,18 +79,9 @@ class Style:
     muted: str = "#8A94A6"
     axis: str = "#3A3F48"
     block: str = "#1A1F29"
-    chassis: str = "#262A31"        # глянцевый чёрный: основной тон
-    chassis_hi: str = "#555C68"     # глянцевый чёрный: светлая сторона градиента
+    chassis: str = "#32363D"        # шасси, матовое
     chassis_edge: str = "#7A828F"   # кант по краю шасси
-    glare: str = "#FFFFFF"          # блик
-    glare_opacity: float = 0.30
-    chassis_finish: str = "flat"    # "gloss" — градиент и блик, "flat" — ровный матовый
-    chassis_flat: str = "#32363D"   # цвет матового шасси
-    xray: bool = False              # линия под шасси пунктиром поверх корпуса
-    xray_color: str = "#9AA1AD"
-    xray_opacity: float = 0.55
     glow: float = 0.75              # яркость ореола метки датчика при сигнале «чёрный»
-    chassis_opacity: float = 1.0
     wheel: str = "#1D1D1F"
     tread: str = "#6E6E73"
 

@@ -8,12 +8,9 @@ import numpy as np  # noqa: E402
 from manim import ValueTracker, linear  # noqa: E402
 
 import model  # noqa: E402
-import track  # noqa: E402
-from params import Sensor  # noqa: E402
 from scenes.base import PIDScene, render  # noqa: E402
-from visuals.panels import Plot, Header, legend, swap  # noqa: E402
-
-E = "err = L − R"
+from track import Route, Track  # noqa: E402
+from visuals.panel import ERR, GraphPanel, Signal  # noqa: E402
 
 
 def swing(amp_deg, period, cycles, dt=0.005):
@@ -28,46 +25,42 @@ class Scene1(PIDScene):
     speed = 0.5        # проигрывание вдвое медленнее
 
     def construct(self):
-        fr, st = self.fr, self.st
-        line = track.straight()
+        st, sens = self.st, self.sensor
+        track = Track(Route(start=(0, -300), heading="вверх").forward(3300))
         t, psi = swing(self.amp_deg, self.period, 2)
-        traj = model.prescribed(line, t, 0.0, 0.0, psi)
-        self.bind(traj, line)
+        self.show(track, model.prescribed(track, t, 0.0, 0.0, psi, sensor=sens))
 
-        plot = Plot(fr, t_max=4.8, lo=0, hi=1023, st=st)
+        a0, a1 = model.channel_sides(sens)
+        L, R = Signal(f"L — {a0} датчик, A0", "L", "L"), Signal(f"R — {a1} датчик, A1", "R", "R")
         prog = ValueTracker(0.0)   # 0: шкала 0…1023, 1: шкала ±1023
         ticks = {0: lambda lo, hi: 1, 512: lambda lo, hi: 1 - prog.get_value(), 1023: lambda lo, hi: 1,
                  -1023: lambda lo, hi: prog.get_value()}
+        panel = GraphPanel(self.fr, st, "Считаем ошибку", "сигналы левого и правого датчиков",
+                           y=("АЦП", 0, 1023), t_max=4.8, t_ticks=range(5), signals=[L, R], ticks=ticks)
         ref_op = ValueTracker(1.0)
-        sens = Sensor()
-        refs = [plot.hline(sens.black[0], f"чёрный ≈ {sens.black[0]}", ref_op),
-                plot.hline(sens.white[0], f"белый ≈ {sens.white[0]}", ref_op)]
+        refs = [panel.plot.hline(sens.black[0], f"чёрный ≈ {sens.black[0]}", ref_op),
+                panel.plot.hline(sens.white[0], f"белый ≈ {sens.white[0]}", ref_op)]
         dim = ValueTracker(1.0)
-        cL = plot.curve(traj.tt, traj.L, st.L, self.t, dim)
-        cR = plot.curve(traj.tt, traj.R, st.R, self.t, dim)
-        header = Header(fr, "Считаем ошибку", "сигналы левого и правого датчиков", st)
-        a0, a1 = model.channel_sides(self.sensor)
-        leg1 = legend(fr, [(st.L, f"L — {a0} датчик, A0", 1), (st.R, f"R — {a1} датчик, A1", 1)], st)
-        self.add(plot.axes(ticks), *refs, header, leg1, cL, cR)
+        cL, cR = panel.curve(self.traj, L, self.t, dim), panel.curve(self.traj, R, self.t, dim)
+        self.add(panel, *refs, cL, cR)
         self.wait(0.5)
 
         # 1. одно качание: L и R
         self.advance(self.period)
 
-        # 2. L, R бледнеют, шкала ±1023, появляется e
+        # 2. L, R бледнеют, шкала ±1023, появляется err
         e_end = ValueTracker(0.0)
-        cE = plot.curve(traj.tt, traj.e, st.e, lambda: min(e_end.get_value(), self.t.get_value()), width_px=3)
-        leg2 = legend(fr, [(st.L, "L", 0.35), (st.R, "R", 0.35), (st.e, "err = L − R", 1)], st)
-        self.play(dim.animate.set_value(0.35), prog.animate.set_value(1.0), plot.lo.animate.set_value(-1023),
-                  ref_op.animate.set_value(0.0), swap(leg1, leg2), header.set_formula(E, st.e),
-                  header.set_caption("разность сигналов"),
-                  run_time=1.2)
+        cE = panel.curve(self.traj, Signal(ERR.label, "e", "e", 3), lambda: min(e_end.get_value(), self.t.get_value()))
+        self.play(dim.animate.set_value(0.35), prog.animate.set_value(1.0), panel.plot.lo.animate.set_value(-1023),
+                  ref_op.animate.set_value(0.0),
+                  panel.set_legend([(Signal("L", "L", "L"), 0.35), (Signal("R", "R", "R"), 0.35), ERR]),
+                  panel.set_formula(ERR.label), panel.set_caption("разность сигналов"), run_time=1.2)
         self.add(cE)
         self.play(e_end.animate.set_value(self.t.get_value()), run_time=1.5, rate_func=linear)
         e_end.set_value(1e9)
 
         # 3. ещё одно качание
-        self.play(header.set_caption("err = 0, пока оба на белом"), run_time=0.8)
+        self.play(panel.set_caption("err = 0, пока оба на белом"), run_time=0.8)
         self.advance(2 * self.period)
         self.wait(1.5)
 

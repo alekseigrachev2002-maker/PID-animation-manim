@@ -1,78 +1,33 @@
-"""Сцена 2b. Подбор P на повороте: поворот буквой «Г» направо, каждый прогон — на одном и том же повороте.
+"""Сцена 2b. Подбор P на повороте «Г» направо; каждый прогон — на одном и том же повороте.
 
-Малый P держит линию на прямой, но на повороте не успевает развернуть робота: err упирается в максимум,
-датчик сползает наружу, робот вылетает. Достаточный P поворот проходит.
+Малый P держит линию на прямой, но на повороте не успевает развернуть робота: датчик проскакивает линию
+за ~0.1 с, err даёт один короткий импульс, робот уезжает прямо. Достаточный P поворот проходит.
 """
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from manim import FadeOut  # noqa: E402
-
-import model  # noqa: E402
-import track  # noqa: E402
-from params import Controller, Motor  # noqa: E402
-from scenes.base import PIDScene, render  # noqa: E402
-from visuals.panels import Header, MotorReadout, Plot, legend  # noqa: E402
-
-CONTROL = "control = kp·err"
-
-# (kp, пояснение в шапке) — в порядке показа
-RUNS = [
-    (0.1, "kp = 0.1, поворота не хватает"),
-    (0.3, "kp = 0.3, поворот пройден"),
-]
+from scenes.base import RunSeries, render  # noqa: E402
+from track import Route, Track  # noqa: E402
 
 
-class Scene2b(PIDScene):
-    runs = RUNS
-    radius = 100.0      # радиус поворота, мм — заглушка до замера трассы
-    y0 = -350.0         # старт: на прямой, за 350 мм до начала дуги
-    delay = 0.020       # задержка команда → колесо, с (заглушка до замеров)
-    t_run = 2.6         # длительность прогона, с
-    speed = 0.33        # проигрывание прогонов втрое медленнее
-    t_slide = 1.2       # линия отъезжает обратно к старту, с
-    t_turn = 1.0        # поворот вдоль прямой, с
+class Scene2b(RunSeries):
+    runs = [
+        (0.1, "kp = 0.1, поворота не хватает"),
+        (0.3, "kp = 0.3, поворот пройден"),
+    ]
+    radius = 100.0        # радиус поворота, мм — заглушка до замера трассы
+    t_run = 2.6
+    t_ticks = [0, 0.5, 1, 1.5, 2, 2.5]
+    t_slide = 1.2
 
-    def start(self):
-        return (0.0, self.y0, 0.0)
+    def make_track(self):
+        return Track(Route(start=(0, -1500), heading="вверх").forward(1500).mark("поворот")
+                     .right(R=self.radius).forward(1500))
 
-    def run(self, line, kp):
-        return model.cached_simulate(line, self.start(), ctrl=Controller(kp=kp), motor=Motor(delay=self.delay),
-                                     t_end=self.t_run)
-
-    def construct(self):
-        fr, st = self.fr, self.st
-        line = track.corner(self.radius, before=1500.0, after=1500.0, turn="right")
-        traj = self.run(line, self.runs[0][0])
-        leg = legend(fr, [(st.e, "err = L − R", 1)], st)
-        readout = MotorReadout(fr, leg.get_right()[0] / fr.unit + fr.layout.width_px / 2 + 40,
-                               model.wheel_signs(Motor()), st=st)
-        self.bind(traj, line, readout=readout)
-
-        plot = Plot(fr, t_max=self.t_run * 1.1, lo=-1023, hi=1023, st=st)
-        ticks = {v: (lambda lo, hi: 1) for v in (-1023, 0, 1023)}
-        header = Header(fr, "Подбираем P", self.runs[0][1], st)
-        self.add(plot.axes(ticks, y_label="err", t_ticks=[0, 0.5, 1, 1.5, 2, 2.5]), header, leg)
-        self.play(header.set_formula(CONTROL, st.e), run_time=0.8)
-
-        for i, (kp, caption) in enumerate(self.runs):
-            if i > 0:
-                self.return_to(line, self.start(), self.t_slide, self.t_turn)
-                traj = self.run(line, kp)
-                self.switch(traj)
-                self.play(readout.opacity.animate.set_value(1.0), run_time=0.4)
-            curve = plot.curve(traj.tt, traj.e, st.e, self.t, width_px=3)
-            self.add(curve)
-            self.wait(0.3)
-            self.advance(traj.t[-1])
-            self.wait(0.8)
-            if i < len(self.runs) - 1:
-                # стоп: кривая гаснет, числа ШИМ приглушаются, в шапке — следующий прогон
-                self.play(FadeOut(curve), readout.opacity.animate.set_value(0.35),
-                          header.set_caption(self.runs[i + 1][1]), run_time=0.8)
-        self.wait(1.0)
+    def start(self, i):
+        return self.track.pose("поворот", -350)       # на прямой, за 350 мм до дуги
 
 
 if __name__ == "__main__":

@@ -1,20 +1,25 @@
-"""Общая основа сцен: макет, трекер времени t, привязка траектории к роботу и миру."""
+"""Основа сцен.
+
+PIDScene — стенд: трекер времени t, камера, поле, робот и элементы, которым каждый кадр раздаётся состояние.
+RunSeries — серия прогонов регулятора: прогон → стоп → возврат → следующий (сцены 2a, 2b и дальше).
+render() — запуск кнопкой ▶ в PyCharm.
+"""
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from manim import Scene, ValueTracker, linear, tempconfig  # noqa: E402
-
 import numpy as np  # noqa: E402
+from manim import FadeOut, Scene, ValueTracker, linear, tempconfig  # noqa: E402
 
 import model  # noqa: E402
-
-from params import Geometry, Sensor, Style  # noqa: E402
-from visuals.panels import Frame, backdrop  # noqa: E402
+from params import Controller, Geometry, Motor, Sensor, Style  # noqa: E402
+from visuals.camera import Camera  # noqa: E402
+from visuals.field import Field  # noqa: E402
+from visuals.layout import Frame, backdrop  # noqa: E402
+from visuals.panel import ERR, GraphPanel  # noqa: E402
 from visuals.robot import Robot  # noqa: E402
-from visuals.world import World, XRay  # noqa: E402
 
 
 class PIDScene(Scene):
@@ -25,37 +30,43 @@ class PIDScene(Scene):
         self.t = ValueTracker(0.0)
         self.add(backdrop(self.fr, self.st))
 
-    def bind(self, traj, track, readout=None):
-        """Робот и мир, которые следуют траектории self.traj по трекеру self.t; readout — индикатор ШИМ колёс."""
-        self.traj = traj
-        world = World(self.fr, track, st=self.st)
-        robot = Robot(self.fr, self.geom, self.st, self.sensor)
-        xray = XRay(self.fr, track, self.geom, st=self.st) if self.st.xray else None
+    # ---------- стенд ----------
 
+    def show(self, track, traj, camera="follow", center=(0.0, 0.0), sensors=True, items=()):
+        """Поставить на стенд поле, робота и элементы items (у каждого — update_state(state))."""
+        self.track, self.traj = track, traj
+        self.view = Camera(self.fr, camera, center)
+        self.field = Field(self.view, track, self.sensor, self.st)
+        self.robot = Robot(self.fr, self.geom, self.st, self.sensor, sensors)
+        self.items = [m for m in items if m is not None]
         self.s_off = np.zeros(2)   # перенос пути колёс между отрезками, чтобы протектор не прыгал
 
-        def follow(m):
-            tr, t = self.traj, self.t.get_value()
-            p = tr.at(t)
-            self.wheel_s = np.array([p["sL"], p["sR"]]) + self.s_off
-            robot.set_pose(p["psi"]).set_wheel_phase(*self.wheel_s)
-            robot.set_signals(*self.levels(tr, t))
-            world.set_robot_xy(p["x"], p["y"])
-            if xray is not None:
-                xray.set_pose(p["x"], p["y"], p["psi"])
-            if readout is not None:
-                sig = tr.signals_at(t)
-                readout.set_values(p["psi"], sig["pwmL"], sig["pwmR"])
+        def follow(_):
+            s = self.state()
+            self.view.follow(s["x"], s["y"])
+            self.field.update_view()
+            self.robot.place(self.view.point(s["x"], s["y"]), s["psi"])
+            self.robot.set_wheel_phase(s["sL"], s["sR"]).set_signals(*s["levels"])
+            for m in self.items:
+                m.update_state(s)
 
-        robot.add_updater(follow)
-        follow(robot)
-        movers = [m for m in (world, xray, readout) if m is not None]
-        for m in movers:
+        self.robot.add_updater(follow)
+        follow(self.robot)
+        for m in (self.field, *self.items):
             # их двигает апдейтер робота; пустой апдейтер говорит Manim перерисовывать их каждый кадр
             m.add_updater(lambda m: None)
-        self.add(robot, *movers)
-        self.robot, self.world, self.readout = robot, world, readout
-        return robot, world
+        self.add(self.field, self.robot, *self.items)
+
+    def state(self):
+        """Состояние в момент t: поза, путь колёс, сигналы регулятора, яркость меток датчиков."""
+        t = self.t.get_value()
+        s = {**self.traj.at(t), **self.traj.signals_at(t)}
+        s["sL"], s["sR"] = np.array([s["sL"], s["sR"]]) + self.s_off
+        self.wheel_s = np.array([s["sL"], s["sR"]])
+        phys = np.array(model.to_channels(np.array([s["L"], s["R"]]), self.sensor))   # A0/A1 → левый/правый
+        w, b = np.asarray(self.sensor.white, float), np.asarray(self.sensor.black, float)
+        s["levels"] = (phys - w) / (b - w)
+        return s
 
     def switch(self, traj, t=0.0):
         """Подменить проигрываемую траекторию (новый прогон или переход); путь колёс продолжается."""
@@ -65,39 +76,88 @@ class PIDScene(Scene):
         self.t.set_value(t)
         self.robot.update(0)
 
-    def return_to(self, line, target, t_slide=1.0, t_turn=1.0):
-        """Возврат между прогонами: линия подъезжает так, что середина оси встаёт в target[:2] (колёса не крутятся),
-        затем робот поворачивается на месте на target[2]. Возвращает target."""
-        x, y, psi = self.end_pose()
-        tx, ty, tpsi = target
-        if np.hypot(tx - x, ty - y) > 0.5:
-            self.switch(model.move(line, (x, y, psi), (tx, ty, psi), t_slide, roll=False,
-                                   geom=self.geom, sensor=self.sensor))
-            self.advance(t_slide, speed=1.0)
-        # кратчайший поворот к целевому курсу
-        dpsi = (tpsi - psi + np.pi) % (2 * np.pi) - np.pi
-        if abs(dpsi) > np.radians(0.5):
-            self.switch(model.move(line, (tx, ty, psi), (tx, ty, psi + dpsi), t_turn,
-                                   geom=self.geom, sensor=self.sensor))
-            self.advance(t_turn, speed=1.0)
-        return tx, ty, tpsi
-
     def end_pose(self):
         p = self.traj.at(self.t.get_value())
         return p["x"], p["y"], p["psi"]
-
-
-    def levels(self, traj, t):
-        """Показания физических датчиков [левый, правый] в момент t, нормированные: 0 — белое, 1 — чёрное."""
-        sig = traj.signals_at(t)
-        phys = np.array(model.to_channels(np.array([sig["L"], sig["R"]]), self.sensor))   # A0/A1 → левый/правый
-        w, b = np.asarray(self.sensor.white, float), np.asarray(self.sensor.black, float)
-        return (phys - w) / (b - w)
 
     def advance(self, t_to, *extra, speed=None):
         """Проиграть траекторию до момента t_to (плюс одновременные анимации extra)."""
         dur = (t_to - self.t.get_value()) / (speed or self.speed)
         self.play(self.t.animate.set_value(t_to), *extra, run_time=dur, rate_func=linear)
+
+    def return_to(self, target, t_slide=1.0, t_turn=1.0):
+        """Возврат между прогонами: линия подъезжает так, что середина оси встаёт в target[:2] (колёса не крутятся),
+        затем робот поворачивается на месте на курс target[2]."""
+        x, y, psi = self.end_pose()
+        tx, ty, tpsi = target
+        if np.hypot(tx - x, ty - y) > 0.5:
+            self.switch(model.move(self.track, (x, y, psi), (tx, ty, psi), t_slide, roll=False,
+                                   geom=self.geom, sensor=self.sensor))
+            self.advance(t_slide, speed=1.0)
+        dpsi = (tpsi - psi + np.pi) % (2 * np.pi) - np.pi      # кратчайший поворот
+        if abs(dpsi) > np.radians(0.5):
+            self.switch(model.move(self.track, (tx, ty, psi), (tx, ty, psi + dpsi), t_turn,
+                                   geom=self.geom, sensor=self.sensor))
+            self.advance(t_turn, speed=1.0)
+
+
+class RunSeries(PIDScene):
+    """Серия прогонов регулятора по одной трассе. Сцена задаёт трассу, старт и прогоны:
+
+        runs = [(0.3, "kp = 0.3, едет по линии"), (dict(kp=0.3, kd=2), "с D")]   # kp или параметры регулятора
+        def make_track(self): ...                 # трасса
+        def start(self, i): ...                   # поза старта прогона i (для i > 0 — после возврата)
+    """
+    phrase = "Подбираем P"
+    formula = "control = kp·err"
+    law = "kp·err"                     # слагаемое в формулах колёс: 150 ± law
+    runs = []
+    signals = [ERR]
+    y = ("err", -1023, 1023)
+    t_run = 2.0                        # длительность прогона, с
+    t_ticks = [0, 0.5, 1, 1.5, 2]
+    speed = 0.33                       # прогоны — втрое медленнее
+    delay = 0.020                      # задержка команда → колесо, с (заглушка до замеров)
+    t_slide = 1.0                      # возврат: линия подъезжает, с
+    t_turn = 1.0                       # возврат: поворот на месте, с
+
+    def make_track(self):
+        raise NotImplementedError
+
+    def start(self, i):
+        raise NotImplementedError
+
+    def simulate(self, pose, ctrl):
+        ctrl = Controller(**({"kp": ctrl} if np.isscalar(ctrl) else ctrl))
+        return model.cached_simulate(self.track, tuple(float(v) for v in pose), ctrl=ctrl,
+                                     motor=Motor(delay=self.delay), t_end=self.t_run)
+
+    def construct(self):
+        self.track = self.make_track()
+        traj = self.simulate(self.start(0), self.runs[0][0])
+        panel = GraphPanel(self.fr, self.st, self.phrase, self.runs[0][1], self.y, self.t_run * 1.12,
+                           self.t_ticks, self.signals,
+                           readout=dict(signs=model.wheel_signs(Motor()), law=self.law))
+        self.show(self.track, traj, items=[panel.readout])
+        self.add(panel)
+        self.play(panel.set_formula(self.formula), run_time=0.8)
+        readout = panel.readout
+        for i, (ctrl, caption) in enumerate(self.runs):
+            if i > 0:
+                target = self.start(i)
+                self.return_to(target, self.t_slide, self.t_turn)
+                self.switch(self.simulate(target, ctrl))
+                self.play(readout.opacity.animate.set_value(1.0), run_time=0.4)
+            curves = panel.curves(self.traj, self.t)
+            self.add(curves)
+            self.wait(0.3)
+            self.advance(self.traj.t[-1])
+            self.wait(0.8)
+            if i < len(self.runs) - 1:
+                # стоп: кривые гаснут, числа ШИМ приглушаются, в шапке — следующий прогон
+                self.play(FadeOut(curves), readout.opacity.animate.set_value(0.35),
+                          panel.set_caption(self.runs[i + 1][1]), run_time=0.8)
+        self.wait(1.0)
 
 
 def render(scene_cls, quality="low_quality", still=False, preview=True):
@@ -105,7 +165,6 @@ def render(scene_cls, quality="low_quality", still=False, preview=True):
 
     Видео → media/videos/<Сцена>/, still=True — последний кадр png → renders/<Сцена>.png.
     quality: "low_quality" (480p, черновик), "medium_quality" (720p), "high_quality" (1080p).
-    То же, что `manim -pql scenes/<файл>.py <Сцена>` (с -s для кадра).
     """
     name = scene_cls.__name__
     cfg = {"quality": quality, "preview": preview, "output_file": name,

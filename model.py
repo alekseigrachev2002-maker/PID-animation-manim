@@ -170,10 +170,6 @@ class Trajectory:
         i = np.clip(np.searchsorted(self.tt, t, side="right") - 1, 0, len(self.tt) - 1)
         return {k: getattr(self, k)[i] for k in ("L", "R", "e", "uP", "uD", "pwmL", "pwmR")}
 
-    def dead_zone_ticks(self, pwm_stop):
-        """Число тиков, где хоть одно колесо получает |ШИМ| < pwm_stop."""
-        return int(np.sum((np.abs(self.pwmL) < pwm_stop) | (np.abs(self.pwmR) < pwm_stop)))
-
     def save(self, path):
         np.savez(path, **{f.name: getattr(self, f.name) for f in fields(self)})
 
@@ -278,7 +274,7 @@ def _pack(cont, ticks, lost_at):
 
 def _fingerprint(obj):
     if hasattr(obj, "lines"):
-        return [(ln.points.tobytes(), ln.closed) for ln in obj.lines]
+        return [ln.points.tobytes() for ln in obj.lines]
     return repr(obj)
 
 
