@@ -59,7 +59,7 @@ class Scene1(PIDScene):
 
         # 2. L, R бледнеют, шкала ±1023, появляется err
         e_end = ValueTracker(0.0)
-        cE = panel.curve(self.traj, Signal(ERR.label, "e", "e", 3), lambda: min(e_end.get_value(), self.t.get_value()))
+        cE = panel.curve(self.traj, ERR, lambda: min(e_end.get_value(), self.t.get_value()))
         self.play(dim.animate.set_value(0.35), prog.animate.set_value(1.0), panel.plot.lo.animate.set_value(-1023),
                   ref_op.animate.set_value(0.0),
                   panel.set_legend([(Signal("L", "L", "L"), 0.35), (Signal("R", "R", "R"), 0.35), ERR]),

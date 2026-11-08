@@ -61,8 +61,8 @@ class Scene0(PIDScene):
         t_max = max(tr.t[-1] for tr in trajs) * 1.12
         panel = GraphPanel(fr, st, "Движение робота", MANEUVERS[0]["caption"], y=("ШИМ", -255, 255),
                            t_max=t_max, t_ticks=[0, 0.5, 1],
-                           # левая кривая толще и под правой: при равных командах видна синяя кайма
-                           signals=[Signal("левый мотор", "pwmL", "L", 5.0), Signal("правый мотор", "pwmR", "R")])
+                           # при равных командах правая (оранжевая) лежит поверх левой — в шапке и так motors(pwm, pwm)
+                           signals=[Signal("левый мотор", "pwmL", "L"), Signal("правый мотор", "pwmR", "R")])
         self.add(panel)
         self.play(panel.set_formula(MANEUVERS[0]["code"], MANEUVERS[0]["colors"]), run_time=0.8)
 

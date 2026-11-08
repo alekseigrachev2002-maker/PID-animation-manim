@@ -26,7 +26,7 @@ class Signal:
     label: str           # подпись в легенде
     key: str             # поле Trajectory: "L", "R", "e", "uP", "uD"
     color: str           # имя цвета в Style ("L", "R", "e", "D") или "#RRGGBB"
-    width_px: float = 2.5
+    width_px: float = 3.0     # все кривые одной ширины
 
 
 ERR = Signal("err = L − R", "e", "e")
@@ -187,7 +187,7 @@ class Plot:
         upd(g)
         return g.set_z_index(Z_UI)
 
-    def curve(self, tt, vals, color, t_end, opacity=None, width_px=2.5):
+    def curve(self, tt, vals, color, t_end, opacity=None, width_px=3.0):
         """Растущая кривая до момента t_end (ValueTracker или функция) с точкой на конце."""
         fr = self.fr
         get_end = t_end.get_value if hasattr(t_end, "get_value") else t_end
