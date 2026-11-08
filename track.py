@@ -114,10 +114,14 @@ def _seg_dist(p, a, b):
 
 
 class Track:
-    """Трасса — набор линий. Принимает Route (собирается здесь) или готовые Line."""
+    """Трасса — набор линий. Принимает Route (собирается здесь) или готовые Line.
 
-    def __init__(self, *items):
+    squares — разметка поля без влияния на датчики: квадраты (x0, y0, x1, y1), мм.
+    """
+
+    def __init__(self, *items, squares=()):
         self.lines = [Line(np.array(it.pts), it.marks) if isinstance(it, Route) else it for it in items]
+        self.squares = list(squares)
 
     def distances(self, p) -> list:
         return [ln.distance(p) for ln in self.lines]
@@ -128,3 +132,20 @@ class Track:
             if mark in ln.marks:
                 return ln.pose_at(ln.marks[mark] + offset)
         raise KeyError(mark)
+
+
+def field1() -> Track:
+    """Поле 2400×1500 с прямыми линиями (PDF): начало координат — левый нижний угол поля, y вверх.
+
+    Чёрные линии 30 мм на сетке 300 мм, перекрёстки под 90°; жёлтые квадраты 300×300 с перекрёстком в центре.
+    """
+    X = (601.7, 901.6, 1201.6, 1501.5, 1801.5)          # вертикали
+    v = [Route(start=(x, 150.1), heading="вверх").forward(1199.8) for x in X]
+    h = [Route(start=(450.0, 300.1), heading="вправо").forward(1500.0),
+         Route(start=(450.0, 1199.9), heading="вправо").forward(1500.0),
+         Route(start=(50.0, 750.0), heading="вправо").forward(2299.7)]           # центральная, от старта до контроля
+    crosses = [Route(start=(200.0, 600.0), heading="вверх").forward(300.0),      # «СТАРТ»
+               Route(start=(2199.7, 600.0), heading="вверх").forward(300.0)]     # «КОНТРОЛЬ»
+    squares = [(x - 150.0, y0, x + 150.0, y0 + 300.0) for x in X for y0 in (150.1, 1050.0)]
+    squares += [(50.0, 600.0, 350.0, 900.0), (2049.7, 600.0, 2349.7, 900.0)]
+    return Track(*v, *h, *crosses, squares=squares)

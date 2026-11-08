@@ -69,7 +69,8 @@ class Scene1(PIDScene):
         e_end.set_value(1e9)
 
         # 3. ещё одно качание
-        self.play(panel.set_caption("err = 0, пока оба на белом"), run_time=0.8)
+        full = round(abs(sens.white[0] - sens.black[0]), -2)        # |err|, когда датчик целиком на линии
+        self.play(panel.set_caption(f"err ≈ ±{full:.0f}, датчик целиком на линии"), run_time=0.8)
         self.advance(self.traj.t[-1])
         self.wait(1.5)
 

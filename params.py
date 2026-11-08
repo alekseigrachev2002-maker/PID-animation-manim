@@ -76,6 +76,8 @@ class Style:
     graph_bg: str = "#0E1117"
     field: str = "#EEECE5"
     line: str = "#151515"
+    mark: str = "#FFDF87"           # жёлтая разметка поля (квадраты)
+    mark_mm: float = 5.0            # толщина разметки, мм
     text: str = "#D7DCE5"
     muted: str = "#8A94A6"
     axis: str = "#3A3F48"

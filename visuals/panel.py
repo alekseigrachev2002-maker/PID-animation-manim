@@ -9,6 +9,7 @@
 Сигнал — что рисуем на графике: подпись в легенде, поле траектории, цвет.
 Доп. легенда — значения без кривой на графике (ШИМ колёс); обновляется каждый кадр через update_state.
 """
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
@@ -50,6 +51,7 @@ class Header(VGroup):
         super().__init__()
         self.fr, self.st = fr, st
         self.phrase = self._phrase(phrase)
+        self.caption_text = caption
         self.caption = self._caption(caption)
         self.block = None
         self.add(self.phrase, self.caption)
@@ -87,6 +89,11 @@ class Header(VGroup):
                                stroke_width=0, fill_color=st.block, fill_opacity=1).move_to(t)
         return VGroup(box, t).set_z_index(Z_UI)
 
+    def _check_fit(self):
+        """Пояснение не должно налезать на блок формулы — иначе предупреждение при рендере."""
+        if self.block is not None and self.caption.get_right()[0] > self.block.get_left()[0] - 12 * self.fr.unit:
+            warnings.warn(f"шапка: пояснение «{self.caption_text}» налезает на блок формулы — сократите текст")
+
     def _swap(self, attr, new):
         old = getattr(self, attr)
         setattr(self, attr, new)
@@ -96,10 +103,15 @@ class Header(VGroup):
         return swap(old, new)
 
     def set_formula(self, s, colors=()):
-        return self._swap("block", self._block(s, colors))
+        anim = self._swap("block", self._block(s, colors))
+        self._check_fit()
+        return anim
 
     def set_caption(self, s):
-        return self._swap("caption", self._caption(s))
+        self.caption_text = s
+        anim = self._swap("caption", self._caption(s))
+        self._check_fit()
+        return anim
 
     def set_phrase(self, phrase, caption):
         """Смена этапа: новая фраза и пояснение."""
