@@ -5,6 +5,9 @@
 (линия подъезжает, поворот на месте — правый датчик проходит над линией: один тёмный — ещё не перекрёсток);
 он едет по линии регулятором из сцены 2 и на тике, где оба датчика ниже порога, — motors(0, 0) и докатывается.
 График L и R — через всю сцену, вместе с «рукой». Камера едет за роботом.
+
+Ключевой кадр (key = True): последний кадр, но график — только езда и стоп, без «руки»: провал правого датчика
+при развороте на линию без видео непонятен.
 """
 import sys
 from pathlib import Path
@@ -54,14 +57,18 @@ class Scene3(PIDScene):
         ends = np.cumsum([sg.t[-1] for sg in segs])        # конец каждого отрезка на общей шкале
         traj = model.chain(*segs)
         self.show(track, traj)
+        # ключевой кадр: на графике только езда по линии и стоп — своя шкала времени от начала езды
+        graph, t0 = (model.chain(segs[3], segs[4]), ends[2]) if self.key else (traj, 0.0)
 
         a0, a1 = model.channel_sides(sens)
         L, R = Signal(f"L — {a0} датчик, A0", "L", "L"), Signal(f"R — {a1} датчик, A1", "R", "R")
         panel = GraphPanel(self.fr, st, "Перекрёсток", "датчики на белом", y=("АЦП", 0, 1023),
-                           t_max=traj.t[-1] * 1.08, t_ticks=range(int(traj.t[-1]) + 1), signals=[L, R])
+                           t_max=graph.t[-1] * 1.08, signals=[L, R],
+                           t_ticks=np.arange(0, graph.t[-1], 0.5) if self.key else range(int(traj.t[-1]) + 1))
         trs = Controller().threshold
         limit = panel.plot.hline(trs, f"threshold = {trs:g}", ValueTracker(1.0))
-        self.add(panel, limit, *panel.curves(traj, self.t))
+        clock = (lambda: max(self.t.get_value() - t0, 0.0)) if self.key else self.t
+        self.add(panel, limit, *panel.curves(graph, clock))
         self.play(panel.set_formula("L < threshold && R < threshold", [("L", "L"), ("R", "R")]), run_time=0.8)
 
         self.advance(ends[0], speed=1.0)

@@ -16,6 +16,8 @@ from track import Route, Track  # noqa: E402
 
 
 class Scene2a(RunSeries):
+    # ключевой кадр для уроков: прогон kp = 0.2: раскачка — err бьётся между ±700
+    key_time = 27.0
     runs = [
         (0.0, "kp = 0, нет регуляции"),
         (0.06, "kp = 0.06, едет по линии"),

@@ -15,6 +15,8 @@ from visuals.panel import Signal  # noqa: E402
 
 
 class Scene2c(RunSeries):
+    # ключевой кадр для уроков: прогон kd = 0.5 в самом трудном месте — конец дуги: всплеск uD гасит вылет
+    key_time = 20.6
     phrase = "Вводим D"
     formula = "control = err * kp + (err - errOld) * kd"          # строка из скетча
     formula_colors = [("err * kp", "e"), ("(err - errOld) * kd", "D")]

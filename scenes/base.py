@@ -2,8 +2,9 @@
 
 PIDScene — стенд: трекер времени t, камера, поле, робот и элементы, которым каждый кадр раздаётся состояние.
 RunSeries — серия прогонов регулятора: прогон → стоп → возврат → следующий (сцены 2a, 2b и дальше).
-render() — запуск кнопкой ▶ в PyCharm.
+render() — запуск кнопкой ▶ в PyCharm; render(..., key=True) — ключевой кадр сцены (картинка для уроков).
 """
+import subprocess
 import sys
 import warnings
 from pathlib import Path
@@ -19,12 +20,15 @@ from params import Controller, Geometry, Motor, Sensor, Style  # noqa: E402
 from visuals.camera import Camera  # noqa: E402
 from visuals.field import Field  # noqa: E402
 from visuals.layout import Frame, backdrop  # noqa: E402
-from visuals.panel import ERR, GraphPanel, Signal  # noqa: E402
+from visuals.panel import ERR, GraphPanel  # noqa: E402
 from visuals.robot import Robot  # noqa: E402
 
 
 class PIDScene(Scene):
     speed = 1.0   # скорость проигрывания: 0.5 — вдвое медленнее реального времени
+    # Ключевой кадр — картинка сцены для уроков (render(..., key=True)), одно из двух:
+    key_time = None   # момент видео, с: кадр вырезается из видео сцены
+    key = False       # True — сцена рисует ключевой кадр сама (последний кадр в этом режиме); видео — без него
 
     def setup(self):
         self.fr, self.st, self.geom, self.sensor = Frame(), Style(), Geometry(), Sensor()
@@ -133,7 +137,6 @@ class RunSeries(PIDScene):
     delay = 0.020                      # задержка команда → колесо, с (заглушка до замеров)
     t_slide = 1.0                      # возврат: линия подъезжает, с
     t_turn = 1.0                       # возврат: поворот на месте, с
-    summary = False                    # сводный кадр (только для картинки): прошлые прогоны не гаснут, а бледнеют
 
     def make_track(self):
         raise NotImplementedError
@@ -156,8 +159,6 @@ class RunSeries(PIDScene):
         self.add(panel)
         self.play(panel.set_formula(self.formula, self.formula_colors), run_time=0.8)
         readout = panel.readout
-        dims = self.summary_opacities()
-        kept = []                           # сводный кадр: кривые всех прогонов и их непрозрачность
         for i, (ctrl, caption) in enumerate(self.runs):
             if i > 0:
                 target = self.start(i)
@@ -165,9 +166,7 @@ class RunSeries(PIDScene):
                 self.switch(self.simulate(target, ctrl))
                 self.play(readout.opacity.animate.set_value(1.0), run_time=0.4)
             clock = RunClock(self.t)            # кривые растут за t во время прогона и замирают на его конце
-            op = ValueTracker(1.0) if self.summary else None
-            curves = panel.curves(self.traj, clock, opacity=op)
-            kept.append(op)
+            curves = panel.curves(self.traj, clock)
             self.add(curves)
             self.wait(0.3)
             self.advance(self.traj.t[-1])
@@ -178,29 +177,9 @@ class RunSeries(PIDScene):
             self.advance(self.traj.t[-1], readout.opacity.animate.set_value(0.35))
             self.wait(0.5)
             if i < len(self.runs) - 1:
-                if self.summary:                # сводный кадр: кривые остаются, бледнеют
-                    self.play(op.animate.set_value(dims[i]), panel.set_caption(self.runs[i + 1][1]), run_time=0.8)
-                else:                           # видео: кривые гаснут, в шапке — следующий прогон
-                    self.play(FadeOut(curves), panel.set_caption(self.runs[i + 1][1]), run_time=0.8)
-        if self.summary:                        # ШИМ колёс после стопа ничего не говорит — место легенде прогонов
-            self.remove(readout)
-            self.play(panel.set_legend(self.summary_legend(dims)), run_time=0.3)
+                # кривые гаснут, в шапке — следующий прогон
+                self.play(FadeOut(curves), panel.set_caption(self.runs[i + 1][1]), run_time=0.8)
         self.wait(1.0)
-
-    def summary_opacities(self):
-        """Непрозрачность кривых в сводном кадре: прошлые прогоны — бледнее, чем раньше они шли; последний — 1."""
-        n = len(self.runs)
-        return [0.22 + 0.33 * i / max(n - 2, 1) for i in range(n - 1)] + [1.0]
-
-    def summary_legend(self, dims):
-        """Легенда сводного кадра: полоска на прогон — с его непрозрачностью и подписью (kp, kd) из шапки прогона.
-        Один сигнал — полоска его цвета; несколько — сначала сигналы, потом прогоны полосками цвета текста."""
-        label = lambda caption: caption.split(",")[0]          # noqa: E731 — «kp = 0.06, едет по линии» → «kp = 0.06»
-        if len(self.signals) == 1:
-            sig = self.signals[0]
-            return [(Signal(label(c), sig.key, sig.color), op) for (_, c), op in zip(self.runs, dims)]
-        return [*self.signals, *[(Signal(label(c), self.signals[0].key, self.st.text), op)
-                                 for (_, c), op in zip(self.runs, dims)]]
 
 
 class RunClock:
@@ -227,13 +206,16 @@ QUALITIES = {   # имя → настройки Manim; рендер в любо�
 }
 
 
-def render(scene_cls, quality="480p", still=False, preview=True):
+def render(scene_cls, quality="480p", still=False, preview=True, key=False):
     """Запуск кнопкой ▶ в PyCharm.
 
     quality: "240p", "480p" (черновик), "720p", "1080p", "4k".
     Видео всех сцен — в одной папке videos/: <Сцена>_<качество>.mp4 (например Scene2c_4k.mp4).
     still=True — только последний кадр: renders/<Сцена>_<качество>.png.
+    key=True — ключевой кадр: renders/<Сцена>_<качество>_key.png (см. key_frame); возвращает путь.
     """
+    if key:
+        return key_frame(scene_cls, quality)
     quality = {"low_quality": "480p", "medium_quality": "720p", "high_quality": "1080p",
                "fourk_quality": "4k"}.get(quality, quality)                  # старые имена Manim — тоже можно
     name = scene_cls.__name__
@@ -244,3 +226,32 @@ def render(scene_cls, quality="480p", still=False, preview=True):
         cfg.update(save_last_frame=True, write_to_movie=False, images_dir=str(ROOT / "renders"))
     with tempconfig(cfg):
         scene_cls().render()
+
+
+def video_path(scene_cls, quality):
+    return ROOT / "videos" / f"{scene_cls.__name__}_{quality}.mp4"
+
+
+def key_frame(scene_cls, quality="720p"):
+    """Ключевой кадр сцены — renders/<Сцена>_<качество>_key.png.
+
+    key_time задан: кадр из видео сцены на этот момент (видео рендерится, если его нет); ffmpeg ищет кадр
+    после декодирования (-ss после -i), поэтому кадр точный и при перерендере не съезжает.
+    Иначе — последний кадр сцены в режиме key (сцена сама собирает картинку; видео не меняется).
+    """
+    out = ROOT / "renders" / f"{scene_cls.__name__}_{quality}_key.png"
+    out.parent.mkdir(exist_ok=True)
+    if scene_cls.key_time is not None:
+        video = video_path(scene_cls, quality)
+        if not video.exists():
+            render(scene_cls, quality, preview=False)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(video), "-ss", f"{scene_cls.key_time:.3f}",
+                        "-frames:v", "1", str(out)], check=True)
+        return out
+    keyed = type(scene_cls.__name__, (scene_cls,), {"key": True})       # та же сцена в режиме key
+    cfg = {**QUALITIES[quality], "preview": False, "save_last_frame": True, "write_to_movie": False,
+           "media_dir": str(ROOT / "media"), "images_dir": str(ROOT / "renders"),
+           "output_file": out.stem}
+    with tempconfig(cfg):
+        keyed().render()
+    return out
