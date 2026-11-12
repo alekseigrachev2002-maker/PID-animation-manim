@@ -10,8 +10,8 @@ import track  # noqa: E402
 from params import Controller, Geometry, Motor, Sensor  # noqa: E402
 
 G, C = Geometry(), Controller()
-S_REAL = Sensor()                                       # замер: датчики немного разные
-S = Sensor(white=(939, 939), black=(204, 204))          # одинаковые (средние) — для проверок геометрии
+S = Sensor()                                            # в модели датчики одинаковые (среднее замера)
+S_REAL = Sensor(white=(920, 958), black=(191, 216))     # замер двух случайных датчиков — немного разные
 LINE = track.Track(track.Route(start=(0, -300), heading="вверх").forward(3300))
 
 
