@@ -123,7 +123,7 @@ class RunSeries(PIDScene):
     phrase = "Подбираем P"
     formula = "control = err * kp"     # как в скетче урока
     formula_colors = [("err", "e")]     # части формулы цветом своих кривых
-    law = "control"                    # в формулах колёс: 150 ± control, как motors(speed − control, speed + control)
+    law = "control"                    # в формулах колёс: 150 ± control, как motors(speed + control, speed − control)
     runs = []
     signals = [ERR]
     y = ("err", -1023, 1023)

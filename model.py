@@ -87,14 +87,14 @@ def control_parts(e, e_old, ctrl: Controller):
 
 
 def motor_pwm(u, ctrl: Controller):
-    """motors(speed − u, speed + u) с constrain ±255 → (speed1 на IN1/IN2, speed2 на IN3/IN4)."""
+    """motors(speed + u, speed − u) с constrain ±255 → (первый аргумент, второй) — как в скетче урока 2."""
     lim = ctrl.pwm_limit
-    return np.clip(ctrl.speed - u, -lim, lim), np.clip(ctrl.speed + u, -lim, lim)
+    return np.clip(ctrl.speed + u, -lim, lim), np.clip(ctrl.speed - u, -lim, lim)
 
 
 def wheel_signs(motor: Motor):
     """Знаки u в скорости физических колёс: ШИМ левого = speed + sL·u, правого = speed + sR·u."""
-    return (1, -1) if motor.swapped else (-1, 1)
+    return (-1, 1) if motor.swapped else (1, -1)
 
 
 def wheel_pwm(u, ctrl: Controller, motor: Motor):

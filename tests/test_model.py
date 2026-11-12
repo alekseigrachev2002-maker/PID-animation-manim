@@ -9,7 +9,9 @@ import model  # noqa: E402
 import track  # noqa: E402
 from params import Controller, Geometry, Motor, Sensor  # noqa: E402
 
-G, S, C = Geometry(), Sensor(), Controller()
+G, C = Geometry(), Controller()
+S_REAL = Sensor()                                       # замер: датчики немного разные
+S = Sensor(white=(939, 939), black=(204, 204))          # одинаковые (средние) — для проверок геометрии
 LINE = track.Track(track.Route(start=(0, -300), heading="вверх").forward(3300))
 
 
@@ -24,6 +26,12 @@ def pwm_at(x=0.0, psi_deg=0.0):
 
 def test_centered_error_zero():
     assert e_at() == pytest.approx(0.0, abs=1e-9)
+
+
+def test_centered_error_is_white_mismatch():
+    """Реальные датчики, робот по центру, оба на белом: err ≈ разница на белом (920 − 958 = −38)."""
+    L, R = model.read_sensors(LINE, (0.0, 0.0, 0.0), G, S_REAL)
+    assert model.error(L, R, C) == pytest.approx(S_REAL.white[0] - S_REAL.white[1], abs=1.0)
 
 
 @pytest.mark.parametrize("psi", [9, 12, 15])
@@ -99,9 +107,9 @@ def test_delay_queue():
     assert model.delayed(deque(), (5, 5)) == (5, 5)
 
 
-def test_unswapped_wiring_steers_away():
-    """Белое выше + моторы не переставлены: код урока рулит от линии (поэтому в подключении есть перестановка)."""
-    traj = model.simulate(LINE, (0.0, 0.0, np.radians(12)), t_end=0.1, motor=Motor(swapped=False))
+def test_swapped_wiring_steers_away():
+    """Белое выше, motors(speed + u, speed − u): если первый аргумент крутит правое колесо — рулит от линии."""
+    traj = model.simulate(LINE, (0.0, 0.0, np.radians(12)), t_end=0.1, motor=Motor(swapped=True))
     assert traj.psi[-1] > traj.psi[0]
 
 
@@ -111,7 +119,7 @@ def test_cache_key_sees_defaults(tmp_path, monkeypatch):
     model.cached_simulate(LINE, (0.0, 0.0, 0.2), t_end=0.05)
     model.cached_simulate(LINE, (0.0, 0.0, 0.2), t_end=0.05, motor=Motor())
     assert len(list(tmp_path.glob("*.npz"))) == 1
-    model.cached_simulate(LINE, (0.0, 0.0, 0.2), t_end=0.05, motor=Motor(swapped=False))
+    model.cached_simulate(LINE, (0.0, 0.0, 0.2), t_end=0.05, motor=Motor(swapped=True))
     assert len(list(tmp_path.glob("*.npz"))) == 2
 
 
@@ -132,10 +140,10 @@ def test_move_without_roll_keeps_wheels():
     assert np.all(tr.sL == 0) and np.all(tr.sR == 0)
 
 
-@pytest.mark.parametrize("s_swap, m_swap, toward", [(False, True, True), (True, False, True),
-                                                   (False, False, False), (True, True, False)])
+@pytest.mark.parametrize("s_swap, m_swap, toward", [(False, False, True), (True, True, True),
+                                                   (False, True, False), (True, False, False)])
 def test_wiring_combinations(s_swap, m_swap, toward):
-    """Белое выше: робот рулит к линии, только если переставлено ровно одно — датчики или моторы."""
+    """Белое выше, motors(speed + u, speed − u): к линии — если не переставлено ничего или переставлено и то, и другое."""
     traj = model.simulate(LINE, (0.0, 0.0, np.radians(12)), t_end=0.1,
                           sensor=Sensor(swapped=s_swap), motor=Motor(swapped=m_swap))
     assert (traj.psi[-1] < traj.psi[0]) == toward
@@ -218,7 +226,7 @@ def test_brake_until_still_with_slow_motor():
 
 
 def test_speed_at_matches_wheels():
-    run = model.simulate(LINE, (0.0, 0.0, 0.0), t_end=1.0)
+    run = model.simulate(LINE, (0.0, 0.0, 0.0), t_end=1.0, sensor=S)
     v, w = run.speed_at(0.9)
     assert v == pytest.approx((run.vL[-1] + run.vR[-1]) / 2, rel=0.01) and abs(w) < 1e-3
 
