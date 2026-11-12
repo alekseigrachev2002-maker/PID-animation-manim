@@ -19,7 +19,7 @@ from params import Controller, Geometry, Motor, Sensor, Style  # noqa: E402
 from visuals.camera import Camera  # noqa: E402
 from visuals.field import Field  # noqa: E402
 from visuals.layout import Frame, backdrop  # noqa: E402
-from visuals.panel import ERR, GraphPanel  # noqa: E402
+from visuals.panel import ERR, GraphPanel, Signal  # noqa: E402
 from visuals.robot import Robot  # noqa: E402
 
 
@@ -133,6 +133,7 @@ class RunSeries(PIDScene):
     delay = 0.020                      # задержка команда → колесо, с (заглушка до замеров)
     t_slide = 1.0                      # возврат: линия подъезжает, с
     t_turn = 1.0                       # возврат: поворот на месте, с
+    summary = False                    # сводный кадр (только для картинки): прошлые прогоны не гаснут, а бледнеют
 
     def make_track(self):
         raise NotImplementedError
@@ -155,6 +156,8 @@ class RunSeries(PIDScene):
         self.add(panel)
         self.play(panel.set_formula(self.formula, self.formula_colors), run_time=0.8)
         readout = panel.readout
+        dims = self.summary_opacities()
+        kept = []                           # сводный кадр: кривые всех прогонов и их непрозрачность
         for i, (ctrl, caption) in enumerate(self.runs):
             if i > 0:
                 target = self.start(i)
@@ -162,7 +165,9 @@ class RunSeries(PIDScene):
                 self.switch(self.simulate(target, ctrl))
                 self.play(readout.opacity.animate.set_value(1.0), run_time=0.4)
             clock = RunClock(self.t)            # кривые растут за t во время прогона и замирают на его конце
-            curves = panel.curves(self.traj, clock)
+            op = ValueTracker(1.0) if self.summary else None
+            curves = panel.curves(self.traj, clock, opacity=op)
+            kept.append(op)
             self.add(curves)
             self.wait(0.3)
             self.advance(self.traj.t[-1])
@@ -173,9 +178,29 @@ class RunSeries(PIDScene):
             self.advance(self.traj.t[-1], readout.opacity.animate.set_value(0.35))
             self.wait(0.5)
             if i < len(self.runs) - 1:
-                # кривые гаснут, в шапке — следующий прогон
-                self.play(FadeOut(curves), panel.set_caption(self.runs[i + 1][1]), run_time=0.8)
+                if self.summary:                # сводный кадр: кривые остаются, бледнеют
+                    self.play(op.animate.set_value(dims[i]), panel.set_caption(self.runs[i + 1][1]), run_time=0.8)
+                else:                           # видео: кривые гаснут, в шапке — следующий прогон
+                    self.play(FadeOut(curves), panel.set_caption(self.runs[i + 1][1]), run_time=0.8)
+        if self.summary:                        # ШИМ колёс после стопа ничего не говорит — место легенде прогонов
+            self.remove(readout)
+            self.play(panel.set_legend(self.summary_legend(dims)), run_time=0.3)
         self.wait(1.0)
+
+    def summary_opacities(self):
+        """Непрозрачность кривых в сводном кадре: прошлые прогоны — бледнее, чем раньше они шли; последний — 1."""
+        n = len(self.runs)
+        return [0.22 + 0.33 * i / max(n - 2, 1) for i in range(n - 1)] + [1.0]
+
+    def summary_legend(self, dims):
+        """Легенда сводного кадра: полоска на прогон — с его непрозрачностью и подписью (kp, kd) из шапки прогона.
+        Один сигнал — полоска его цвета; несколько — сначала сигналы, потом прогоны полосками цвета текста."""
+        label = lambda caption: caption.split(",")[0]          # noqa: E731 — «kp = 0.06, едет по линии» → «kp = 0.06»
+        if len(self.signals) == 1:
+            sig = self.signals[0]
+            return [(Signal(label(c), sig.key, sig.color), op) for (_, c), op in zip(self.runs, dims)]
+        return [*self.signals, *[(Signal(label(c), self.signals[0].key, self.st.text), op)
+                                 for (_, c), op in zip(self.runs, dims)]]
 
 
 class RunClock:
