@@ -28,6 +28,7 @@ class Scene2c(RunSeries):
     t_run = 3.4            # дуга и выход на прямую
     t_ticks = [0, 0.5, 1, 1.5, 2, 2.5, 3]
     t_slide = 1.2
+    return_together = True     # возврат по диагонали: сдвиг и поворот одновременно
 
     def make_track(self):
         return Track(Route(start=(0, -1500), heading="вверх").forward(1500).mark("поворот")

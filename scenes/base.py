@@ -22,9 +22,9 @@ from visuals.layout import Frame, backdrop  # noqa: E402
 from visuals.panel import ERR, GraphPanel  # noqa: E402
 from visuals.robot import Robot  # noqa: E402
 
-GENERAL = 0.75 # общий коэфициент замедления
-PLAYBACK = 0.4 * GENERAL  # замедление езды во всех сценах: 0.25 — вчетверо медленнее реального времени
-HAND = 0.85 * GENERAL  # замедление движений «рукой» (перестановка, линия подъезжает, поворот на месте): вдвое
+GENERAL = 0.75  # общий коэффициент замедления (доля реального времени): крутить его, чтобы ускорить или замедлить все
+PLAYBACK = 0.4 * GENERAL  # езда во всех сценах (сейчас 0.3 — в 3,3 раза медленнее реального времени)
+HAND = 0.85 * GENERAL  # движения «рукой»: перестановка, линия подъезжает, поворот на месте, качание в сцене 1
 
 
 class PIDScene(Scene):
@@ -101,11 +101,20 @@ class PIDScene(Scene):
         dur = (t_to - self.t.get_value()) / (speed or self.speed)
         self.play(self.t.animate.set_value(t_to), *extra, run_time=dur, rate_func=linear)
 
-    def return_to(self, target, t_slide=1.0, t_turn=1.0):
+    def return_to(self, target, t_slide=1.0, t_turn=1.0, together=False):
         """Возврат между прогонами: линия подъезжает так, что середина оси встает в target[:2] (колеса не крутятся),
-        затем робот поворачивается на месте на курс target[2]."""
+        затем робот поворачивается на месте на курс target[2].
+
+        together=True — одним движением: сдвиг и поворот одновременно, за t_slide + t_turn (по диагонали,
+        а не «буквой Г»: для сцен на повороте, где курс в конце прогона далек от стартового)."""
         x, y, psi = self.end_pose()
         tx, ty, tpsi = target
+        if together:
+            dpsi = (tpsi - psi + np.pi) % (2 * np.pi) - np.pi
+            self.switch(model.move(self.track, (x, y, psi), (tx, ty, psi + dpsi), t_slide + t_turn, roll=False,
+                                   geom=self.geom, sensor=self.sensor))
+            self.advance(t_slide + t_turn, speed=HAND)
+            return
         if np.hypot(tx - x, ty - y) > 0.5:
             self.switch(model.move(self.track, (x, y, psi), (tx, ty, psi), t_slide, roll=False,
                                    geom=self.geom, sensor=self.sensor))
@@ -135,6 +144,7 @@ class RunSeries(PIDScene):
     t_ticks = [0, 0.5, 1, 1.5, 2]
     t_slide = 1.0  # возврат: линия подъезжает, с
     t_turn = 1.0  # возврат: поворот на месте, с
+    return_together = False  # возврат одним движением (сдвиг + поворот) — для сцен на повороте
 
     def make_track(self):
         raise NotImplementedError
@@ -161,7 +171,7 @@ class RunSeries(PIDScene):
         for i, (ctrl, caption) in enumerate(self.runs):
             if i > 0:
                 target = self.start(i)
-                self.return_to(target, self.t_slide, self.t_turn)
+                self.return_to(target, self.t_slide, self.t_turn, self.return_together)
                 self.switch(self.simulate(target, ctrl))
                 self.play(readout.opacity.animate.set_value(1.0), run_time=0.4)
             clock = RunClock(self.t)  # кривые растут за t во время прогона и замирают на его конце

@@ -8,7 +8,7 @@ import numpy as np  # noqa: E402
 from manim import ValueTracker, linear  # noqa: E402
 
 import model  # noqa: E402
-from scenes.base import PIDScene, render  # noqa: E402
+from scenes.base import HAND, PIDScene, render  # noqa: E402
 from track import Route, Track  # noqa: E402
 from visuals.panel import ERR, GraphPanel, Signal  # noqa: E402
 
@@ -28,7 +28,7 @@ def swing(amp_deg, period, cycles, ramp=0.3, dt=0.005):
 
 
 class Scene1(PIDScene):
-    speed = 0.5        # качание «рукой» — вдвое медленнее реального (езды здесь нет, PLAYBACK не нужен)
+    speed = HAND       # качание «рукой» — как остальные движения рукой (езды здесь нет, PLAYBACK не нужен)
     amp_deg = 15.0     # амплитуда качания
     period = 2.0       # период качания, с
     ramp = 0.3         # плавный старт и остановка качания, с
