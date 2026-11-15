@@ -28,15 +28,24 @@ class Scene3(PIDScene):
     stand = (560.0, 470.0, np.radians(90))
     place = (X_LINE, 500.0, 0.0)            # куда ставят: на линию, вверх; до перекрестка датчикам ~140 мм
     ctrl = dict(kp=0.09, kd=1.0)            # регулятор из сцены 2
-    delay = 0.020                           # как в сценах 2
     t_stand = 0.6                           # стоит на белом, с
     t_slide = 1.0                           # «рука»: линия подъезжает, с
     t_turn = 1.0                            # «рука»: поворот на месте, с
-    speed = 0.2                             # езда — впятеро медленнее; «рука» — в реальном времени
+
+    def panel(self, caption, t_end, t_ticks):
+        """Панель сцены: L и R (0…1023), формула-условие, пунктир порога (подпись слева — справа провалы кривых).
+        Ее же берет картинка урока (lessons.Scene3Key) — чтобы кадр не расходился с видео."""
+        a0, a1 = model.channel_sides(self.sensor)
+        L, R = Signal(f"L — {a0} датчик, A0", "L", "L"), Signal(f"R — {a1} датчик, A1", "R", "R")
+        panel = GraphPanel(self.fr, self.st, "Перекресток", caption, y=("АЦП", 0, 1023), t_max=t_end * 1.08,
+                           t_ticks=t_ticks, signals=[L, R],
+                           formula="L < threshold && R < threshold", formula_colors=[("L", "L"), ("R", "R")])
+        trs = Controller().threshold
+        return panel, panel.plot.hline(trs, f"threshold = {trs:g}", ValueTracker(1.0), side="left")
 
     def segments(self, track):
         """Отрезки сцены: стоит, линия подъезжает, поворот, езда до перекрестка, торможение."""
-        g, s, m = self.geom, self.sensor, Motor(delay=self.delay)
+        g, s, m = self.geom, self.sensor, Motor()
         x, y, psi = self.stand
         tx, ty, tpsi = self.place
         stand = model.prescribed(track, np.arange(0, self.t_stand + 1e-9, 0.005), x, y, psi, g, s)
@@ -48,20 +57,13 @@ class Scene3(PIDScene):
         return [stand, slide, turn, run, stop]
 
     def construct(self):
-        st, sens = self.st, self.sensor
         track = Track(*field1().lines)                     # без желтых квадратов
         segs = self.segments(track)
         ends = np.cumsum([sg.t[-1] for sg in segs])        # конец каждого отрезка на общей шкале
         traj = model.chain(*segs)
         self.show(track, traj)
 
-        a0, a1 = model.channel_sides(sens)
-        L, R = Signal(f"L — {a0} датчик, A0", "L", "L"), Signal(f"R — {a1} датчик, A1", "R", "R")
-        panel = GraphPanel(self.fr, st, "Перекресток", "датчики на белом", y=("АЦП", 0, 1023),
-                           t_max=traj.t[-1] * 1.08, t_ticks=range(int(traj.t[-1]) + 1), signals=[L, R],
-                           formula="L < threshold && R < threshold", formula_colors=[("L", "L"), ("R", "R")])
-        trs = Controller().threshold
-        limit = panel.plot.hline(trs, f"threshold = {trs:g}", ValueTracker(1.0), side="left")   # справа — провалы
+        panel, limit = self.panel("датчики на белом", traj.t[-1], range(int(traj.t[-1]) + 1))
         self.add(panel, limit, *panel.curves(traj, self.t))
         self.play(panel.intro(), run_time=0.8)          # заголовок выезжает слева
 

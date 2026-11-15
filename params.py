@@ -15,7 +15,7 @@ class Geometry:
     cutout_x: tuple = (50.0, 74.0)      # вырез под колесо по |x|
     cutout_h: float = 48.0
     cutout_r: float = 4.0
-    wheel_d: float = 44.0
+    wheel_d: float = 43.0             # как WHEEL_D в тестах машинки
     wheel_w: float = 20.0
     wheel_x: float = 62.0               # центр колеса по |x|
     sensor_x: float = 23.789            # оптический центр TCRT по |x|
@@ -36,14 +36,14 @@ class Sensor:
     sigma: float = 2.5          # радиус гауссова пятна, мм
     white: tuple = (939, 939)   # АЦП на белом, (левый, правый): среднее замера 920 и 958; белое выше
     black: tuple = (204, 204)   # АЦП на черном, (левый, правый): среднее замера 191 и 216
-    swapped: bool = False       # A0 (L в коде) подключен к физически ПРАВОМУ датчику — нет: A0 левый
+    swapped: bool = False       # True — A0 (L в коде) на физически правом датчике; проверено: A0 — левый
     noise: float = 0.0          # СКО шума АЦП
     line_width: float = 30.0   # поле 2400×1500 (PDF): линия 30 мм
 
 
 @dataclass(frozen=True)
 class Motor:
-    tau: float = 0.11           # инерция колеса, с: выбег после motors(0, 0) ≈ v·tau — 30 мм с 280 мм/с (замер на полу)
+    tau: float = 0.085          # инерция колеса, с: с задержкой delay выбег после motors(0, 0) с 280 мм/с — 30 мм (замер)
     pwm_start: float = 67.0     # трогание стоящего колеса (замер)
     pwm_stop: float = 50.0      # крутящееся колесо останавливается ниже этого (замер)
     # скорость колеса на полу от ШИМ, (ШИМ, мм/с), между точками — прямая: 150 → 280, 255 → 435 (замер driveTest)
@@ -52,7 +52,7 @@ class Motor:
     # Замер: разворот motors(150, -150) 3 с на полу — колеса прошли ~465 мм (без трения было бы ~840)
     turn_share: float = 0.55
     stop_eps: float = 1.0       # |v| ниже этого считаем, что колесо встало, мм/с
-    delay: float = 0.0          # чистая задержка команда → колесо, с (кратна периоду регулятора)
+    delay: float = 0.020        # задержка команда → колесо, с: оценка, не замер; одна для всех сцен (≈ 2 периода регулятора)
     swapped: bool = False       # motors(левый, правый): первый аргумент — левое колесо (M2), проверено на машинке
 
     def speed(self, pwm) -> float:
@@ -64,8 +64,8 @@ class Motor:
 @dataclass(frozen=True)
 class Controller:
     speed: float = 150.0
-    kp: float = 0.3
-    kd: float = 0.0             # на один тик регулятора
+    kp: float = 0.09            # найденные по модели (tune.py, сцены 2c и 3)
+    kd: float = 1.0             # на один тик регулятора
     balance: float = 1.0        # sensorBalance
     period: float = 0.0103      # период регулятора, с: delay(10) + два analogRead (~0,11 мс каждый) + расчет и motors() (~0,05 мс)
     pwm_limit: float = 255.0

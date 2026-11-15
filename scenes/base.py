@@ -23,8 +23,11 @@ from visuals.panel import ERR, GraphPanel  # noqa: E402
 from visuals.robot import Robot  # noqa: E402
 
 
+PLAYBACK = 0.25   # замедление всех сцен: 0.25 — вчетверо медленнее реального времени
+
+
 class PIDScene(Scene):
-    speed = 1.0   # скорость проигрывания: 0.5 — вдвое медленнее реального времени
+    speed = PLAYBACK   # скорость проигрывания — одна для всех сцен; движения «рукой» — в реальном времени (speed=1.0)
 
     def setup(self):
         self.fr, self.st, self.geom, self.sensor = Frame(), Style(), Geometry(), Sensor()
@@ -129,8 +132,6 @@ class RunSeries(PIDScene):
     y = ("err", -1023, 1023)
     t_run = 2.0                        # длительность прогона, с
     t_ticks = [0, 0.5, 1, 1.5, 2]
-    speed = 0.33                       # прогоны — втрое медленнее
-    delay = 0.020                      # задержка команда → колесо, с (заглушка до замеров)
     t_slide = 1.0                      # возврат: линия подъезжает, с
     t_turn = 1.0                       # возврат: поворот на месте, с
 
@@ -141,9 +142,9 @@ class RunSeries(PIDScene):
         raise NotImplementedError
 
     def simulate(self, pose, ctrl):
-        ctrl = Controller(**({"kp": ctrl} if np.isscalar(ctrl) else ctrl))
+        ctrl = Controller(**({"kp": ctrl, "kd": 0.0} if np.isscalar(ctrl) else ctrl))   # одно число — только P
         return model.cached_simulate(self.track, tuple(float(v) for v in pose), ctrl=ctrl,
-                                     motor=Motor(delay=self.delay), t_end=self.t_run)
+                                     motor=Motor(), t_end=self.t_run)
 
     def construct(self):
         self.track = self.make_track()
@@ -170,7 +171,7 @@ class RunSeries(PIDScene):
             clock.stop()
             # стоп: motors(0, 0), робот докатывается по той же физике; строка ШИМ приглушается — регулятор выключен
             self.switch(model.brake(self.track, self.traj, geom=self.geom, sensor=self.sensor,
-                                    motor=Motor(delay=self.delay)))
+                                    motor=Motor()))
             self.advance(self.traj.t[-1], readout.opacity.animate.set_value(0.35))
             self.wait(0.5)
             if i < len(self.runs) - 1:

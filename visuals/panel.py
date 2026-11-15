@@ -13,11 +13,11 @@ import warnings
 from dataclasses import dataclass
 
 import numpy as np
-from manim import (DOWN, LEFT, RIGHT, UP, AnimationGroup, DashedLine, Dot, FadeIn, FadeOut, Line, Rectangle, RoundedRectangle,
+from manim import (LEFT, RIGHT, UP, AnimationGroup, DashedLine, Dot, FadeIn, FadeOut, Line, Rectangle, RoundedRectangle,
                    Succession, ValueTracker, VGroup, VMobject)
 
 from params import Style
-from visuals.layout import Z_UI, baseline, on_baseline, pick_font, text
+from visuals.layout import Z_UI, on_baseline, pick_font, text
 
 ORIGIN_PT = np.zeros(3)
 
@@ -103,7 +103,7 @@ class Header(VGroup):
         return VGroup(box, t).set_z_index(Z_UI)
 
     def _check_fit(self):
-        """Заголовок не должен налезать на блок формулы, пояснение — выходить за панель; иначе предупреждение."""
+        """Пояснение не должно выходить за панель — иначе предупреждение при рендере."""
         fr = self.fr
         if self.caption.get_right()[0] > fr.px(fr.layout.graph_w_px - fr.layout.margin_px, 0)[0]:
             warnings.warn(f"шапка: пояснение «{self.caption_text}» не помещается в панель — сократите текст")
@@ -378,7 +378,7 @@ class GraphPanel(VGroup):
         """Сменить формулу и/или пояснение (swap); colors — какие части формулы каким цветом: [("err", "e")]."""
         return self.header.set_text(formula, self._colors(colors), caption)
 
-    def set_formula(self, s, colors=(("err", "e"),)):
+    def set_formula(self, s, colors=()):
         return self.set_text(formula=s, colors=colors)
 
     def set_caption(self, s):

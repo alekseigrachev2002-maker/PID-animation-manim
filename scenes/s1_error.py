@@ -31,7 +31,6 @@ class Scene1(PIDScene):
     amp_deg = 15.0     # амплитуда качания
     period = 2.0       # период качания, с
     ramp = 0.3         # плавный старт и остановка качания, с
-    speed = 0.5        # проигрывание вдвое медленнее
 
     def construct(self):
         st, sens = self.st, self.sensor

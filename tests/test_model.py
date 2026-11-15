@@ -283,7 +283,7 @@ def test_brake_waits_for_delay():
     v = (stop.vL + stop.vR) / 2
     k = np.searchsorted(stop.t, 0.02)
     assert v[k] == pytest.approx(v[0], rel=0.02)
-    assert stop.y[-1] - stop.y[0] > model.brake(LINE, run).y[-1] - run.y[-1] + 3   # прокат длиннее, чем без задержки
+    assert stop.y[-1] - stop.y[0] > model.brake(LINE, run, motor=Motor(delay=0.0)).y[-1] - run.y[-1] + 3   # прокат длиннее, чем без задержки
 
 
 def test_chain_continues_time_and_wheel_path():
