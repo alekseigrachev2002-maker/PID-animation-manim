@@ -52,6 +52,7 @@ class Scene1(PIDScene):
         dim = ValueTracker(1.0)
         cL, cR = panel.curves(self.traj, self.t, dim)
         self.add(panel, *refs, cL, cR)
+        self.play(panel.intro(), run_time=0.8)          # заголовок выезжает слева
         self.wait(0.5)
 
         # 1. одно качание: L и R

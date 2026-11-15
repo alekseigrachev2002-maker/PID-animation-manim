@@ -1,13 +1,13 @@
 """Сцена 0. Движение робота: команды моторам → как едет робот. Без датчиков и без линии.
 
 Три маневра, каждый с места и до остановки (после команды — motors(0, 0) и докатывание по физике):
-разгон с линейным ростом ШИМ до 255 и удержанием, разворот на месте, левое колесо чуть быстрее — робота уводит вправо.
-Камера неподвижна и смотрит на фрагмент поля 2400×1500 (вертикаль «0–5» между желтым квадратом и центральным
-перекрестком): линия здесь — эталон «прямо», датчиков у робота нет. Между маневрами робота переставляют «рукой».
+разгон с линейным ростом ШИМ до 255 и удержанием, разворот на месте ровно на 180°, левое колесо быстрее —
+робота уводит вправо по дуге. Камера едет за роботом по полю 2400×1500 (старт — на вертикали «0–5» между желтым
+квадратом и центральным перекрестком): линии — эталон «прямо», датчиков у робота нет. Между маневрами робота
+переставляют «рукой». Проигрывание ×0.4.
 На графике — только то, что пишется в коде: ШИМ левого и правого мотора.
 """
 import sys
-import warnings
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -21,7 +21,7 @@ from track import field1  # noqa: E402
 from visuals.panel import GraphPanel, Signal  # noqa: E402
 
 T_RAMP = 0.35  # разгон: ШИМ линейно 0 → 255 за T_RAMP, с
-T_HOLD = 0.15  # затем держим 255 — дольше не дает место в кадре (на 255 робот едет ~615 мм/с)
+T_HOLD = 0.6   # затем держим 255 (камера за роботом — место в кадре не ограничивает)
 
 # пояснение в шапке, вызов в блоке формулы и цвета его частей, старт (x, y, ψ) в мм от CENTER, ШИМ, время команды
 MANEUVERS = [
@@ -29,29 +29,17 @@ MANEUVERS = [
          start=(0.0, -95.0, 0.0), pwm=lambda t: (255 * min(t / T_RAMP, 1.0),) * 2, t_on=T_RAMP + T_HOLD),
     dict(caption="разворот на месте", code="motors(-150, 150)", colors=[("-150", "L"), ("150", "R", 1)],
          start=(0.0, 0.0, 0.0), pwm=(-150, 150), t_on=None),          # None — подобрать: с докатыванием ровно 180°
-    dict(caption="левое колесо быстрее", code="motors(180, 150)", colors=[("180", "L"), ("150", "R")],
-         start=(-25.0, -95.0, 0.0), pwm=(180, 150), t_on=0.55),       # уводит вправо на ~37 мм, курс −23°
+    dict(caption="левое колесо быстрее", code="motors(220, 180)", colors=[("220", "L"), ("180", "R")],
+         start=(-25.0, -95.0, 0.0), pwm=(220, 180), t_on=2.0),        # дуга вправо, курс около −30°
 ]
 
-PANEL_PX = (1066.5, 360.0)    # центр правой панели — сюда камера ставит точку поля CENTER
-CENTER = (601.7, 600.0)       # точка поля 1 в центре панели: на вертикали x = 601.7, между квадратом и перекрестком
-INSIDE = 0.8                  # робот целиком в этой доле правой панели
+CENTER = (601.7, 600.0)       # точка поля 1, от которой отсчитаны старты: вертикаль x = 601.7, между квадратом и перекрестком
 
 
 class Scene0(PIDScene):
-    speed = 0.2           # маневры короткие (место в кадре) — проигрываем впятеро медленнее
+    speed = 0.4           # проигрывание в 2,5 раза медленнее
     t_slide = 1.0         # перестановка робота между маневрами, с
     t_turn = 1.0
-
-    def check_inside(self, traj):
-        """Предупредить, если робот (круг шасси) выходит за INSIDE правой панели."""
-        lay, mm = self.fr.layout, self.fr.layout.px_per_mm
-        w, h = lay.width_px - lay.graph_w_px, self.fr.height_px
-        half_w, half_h = INSIDE * w / 2 / mm - self.geom.chassis_r, INSIDE * h / 2 / mm - self.geom.chassis_r
-        dx, dy = np.abs(traj.x - CENTER[0]).max(), np.abs(traj.y - CENTER[1]).max()
-        if dx > half_w or dy > half_h:
-            warnings.warn(f"робот выходит за {INSIDE:.0%} панели: |x| ≤ {dx:.0f} (можно {half_w:.0f}), "
-                          f"|y| ≤ {dy:.0f} (можно {half_h:.0f}) мм")
 
     def half_turn(self, track, pose, pwm):
         """Время команды разворота, после которого робот с докатыванием повернется ровно на 180° (по модели)."""
@@ -70,9 +58,7 @@ class Scene0(PIDScene):
                 for p, m in zip(starts, MANEUVERS)]
         trajs = [model.drive(track, p, m["pwm"], t, stop=True, geom=self.geom)
                  for p, m, t in zip(starts, MANEUVERS, t_on)]
-        for tr in trajs:
-            self.check_inside(tr)
-        self.show(track, trajs[0], camera="fixed", center=CENTER, anchor_px=PANEL_PX, sensors=False)
+        self.show(track, trajs[0], sensors=False)       # камера за роботом, как в остальных сценах
 
         t_max = max(tr.t[-1] for tr in trajs) * 1.12
         panel = GraphPanel(fr, st, "Движение робота", MANEUVERS[0]["caption"], y=("ШИМ", -255, 255),
@@ -80,6 +66,7 @@ class Scene0(PIDScene):
                            signals=[Signal("левый мотор", "pwmL", "L"), Signal("правый мотор", "pwmR", "R")],
                            formula=MANEUVERS[0]["code"], formula_colors=MANEUVERS[0]["colors"])   # текст — сразу
         self.add(panel)
+        self.play(panel.intro(), run_time=0.8)          # заголовок выезжает слева
 
         curves = None
         for i, (m, traj) in enumerate(zip(MANEUVERS, trajs)):

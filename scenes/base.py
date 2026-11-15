@@ -154,6 +154,7 @@ class RunSeries(PIDScene):
                            formula=self.formula, formula_colors=self.formula_colors)      # текст — сразу на месте
         self.show(self.track, traj, items=[panel.readout])
         self.add(panel)
+        self.play(panel.intro(), run_time=0.8)          # заголовок выезжает слева
         readout = panel.readout
         for i, (ctrl, caption) in enumerate(self.runs):
             if i > 0:

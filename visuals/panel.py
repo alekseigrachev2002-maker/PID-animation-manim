@@ -135,6 +135,10 @@ class Header(VGroup):
     def set_caption(self, s):
         return self.set_text(caption=s)
 
+    def intro(self):
+        """Начало сцены: заголовок выезжает слева направо (с проявлением); остальной текст уже на месте."""
+        return FadeIn(self.phrase, shift=RIGHT * min(self.phrase.width, 300 * self.fr.unit))
+
     def set_phrase(self, phrase, caption):
         """Смена этапа: новая фраза и пояснение."""
         return [self._swap("phrase", self._phrase(phrase)), self.set_caption(caption)]
@@ -365,6 +369,10 @@ class GraphPanel(VGroup):
 
     def _colors(self, colors):
         return [(part, color_of(self.st, c), *n) for part, c, *n in colors]
+
+    def intro(self):
+        """Анимация начала сцены: заголовок выезжает слева направо — self.play(panel.intro(), run_time=0.8)."""
+        return self.header.intro()
 
     def set_text(self, formula=None, colors=(), caption=None):
         """Сменить формулу и/или пояснение (swap); colors — какие части формулы каким цветом: [("err", "e")]."""

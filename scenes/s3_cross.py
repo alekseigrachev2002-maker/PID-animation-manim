@@ -27,7 +27,7 @@ class Scene3(PIDScene):
     # стоит левее линии, повернут налево: датчики на белом; «рука» сдвигает его вправо — датчики линию не пересекают
     stand = (560.0, 470.0, np.radians(90))
     place = (X_LINE, 500.0, 0.0)            # куда ставят: на линию, вверх; до перекрестка датчикам ~140 мм
-    ctrl = dict(kp=0.15, kd=1.0)            # регулятор из сцены 2
+    ctrl = dict(kp=0.09, kd=1.0)            # регулятор из сцены 2
     delay = 0.020                           # как в сценах 2
     t_stand = 0.6                           # стоит на белом, с
     t_slide = 1.0                           # «рука»: линия подъезжает, с
@@ -63,6 +63,7 @@ class Scene3(PIDScene):
         trs = Controller().threshold
         limit = panel.plot.hline(trs, f"threshold = {trs:g}", ValueTracker(1.0), side="left")   # справа — провалы
         self.add(panel, limit, *panel.curves(traj, self.t))
+        self.play(panel.intro(), run_time=0.8)          # заголовок выезжает слева
 
         self.advance(ends[0], speed=1.0)
         self.play(panel.set_caption("ставим на линию"), run_time=0.6)
