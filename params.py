@@ -77,7 +77,8 @@ class Style:
     # шрифты и кегли — как на слайдах презентации (видео идет на весь слайд 16:9, 1 pt слайда = 4/3 px кадра 1280×720)
     font: tuple = ("Segoe UI", "Open Sans", "Inter")                                     # первый найденный
     code_font: tuple = ("Consolas", "JetBrains Mono", "DejaVu Sans Mono", "Courier New")  # первый найденный
-    title_px: float = 43.0          # заголовок — 32 pt
+    title_px: float = 43.0          # заголовок — 32 pt, полужирный, как заголовки слайдов
+    title_weight: str = "BOLD"
     text_px: float = 24.0           # текст и формулы — 18 pt
     small_px: float = 19.0          # мелкие подписи не по сути (числа на осях, единицы, порог) — 14 pt
     L: str = "#4C8DF6"

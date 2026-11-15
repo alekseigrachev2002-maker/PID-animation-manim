@@ -57,7 +57,7 @@ class Header(VGroup):
         self.add(self.phrase, self.caption)
 
     def _phrase(self, s):
-        t = text(self.fr, s, self.st.title_px, self.st.text, self.st)
+        t = text(self.fr, s, self.st.title_px, self.st.text, self.st, weight=self.st.title_weight)
         return t.move_to(self.fr.px(self.fr.layout.margin_px, self.fr.layout.header_y_px),
                          aligned_edge=LEFT).set_z_index(Z_UI)
 
@@ -231,7 +231,7 @@ class Plot:
         get_end = t_end.get_value if hasattr(t_end, "get_value") else t_end
         line = VMobject(stroke_color=color, stroke_width=fr.stroke(width_px))
         dot = Dot(radius=4 * fr.unit, color=color)
-        me = dict(tt=np.asarray(tt, float), vals=np.asarray(vals, float), width=width_px, order=0, dirs={})
+        me = dict(tt=np.asarray(tt, float), vals=np.asarray(vals, float), width=width_px, order=0)
         if peers is not None:
             me["order"] = len(peers)
             peers.append(me)
@@ -275,52 +275,19 @@ class Plot:
         """Сдвиг кривой me «вверх» (px эталонного кадра, вдоль нормали) в точках ts; y — ее экранные координаты.
 
         Сдвиг полный, когда кривые совпадают, и плавно сходит на нет к расстоянию в одну толщину линии.
-        Направление — какая кривая выше по данным, та и уходит вверх. На участке точного равенства — как кривые
-        разойдутся после него (или как сходились до него); если порядок до и после разный, направление меняется
-        плавно — кривые пересекаются посередине участка. Совсем без различий — выше та, что раньше в списке.
+        Дорожки постоянные: кривая раньше в списке всегда уходит вверх, позже — вниз. Так на пересечении
+        кривые просто проходят друг сквозь друга — без скачка, который давал выбор «кто выше по данным».
         """
         out = np.zeros(len(ts))
         for other in peers:
             if other is me:
                 continue
-            assert len(other["tt"]) == len(me["tt"]), "раздвигаются только кривые одной траектории"
             w = (me["width"] + other["width"]) / 2
             d_px = (y - self.to_screen(ts, np.interp(ts, other["tt"], other["vals"]))[:, 1]) / self.fr.unit
             k = np.clip(1 - np.abs(d_px) / w, 0, 1)
             k = k * k * (3 - 2 * k)                                      # плавно: smoothstep
-            out += self.SPREAD * w * k * np.interp(ts, me["tt"], self._direction(me, other))
+            out += self.SPREAD * w * k * (1.0 if me["order"] < other["order"] else -1.0)
         return out
-
-    @staticmethod
-    def _direction(me, other):
-        """+1 — me выше other, −1 — ниже; на участках равенства — по соседям (см. _spread). Кэшируется."""
-        key = id(other)
-        if key not in me["dirs"]:
-            diff = me["vals"] - other["vals"]
-            tol = 1e-9 * max(1.0, np.abs(me["vals"]).max(), np.abs(other["vals"]).max())
-            sgn = np.sign(diff) * (np.abs(diff) > tol)
-            tie = sgn == 0
-            idx = np.arange(len(sgn))
-            if tie.all():
-                sgn = np.full(len(sgn), 1.0 if me["order"] < other["order"] else -1.0)
-            elif tie.any():
-                known = idx[~tie]
-                prev = np.searchsorted(known, idx, side="right") - 1       # последний различный слева
-                nxt = np.searchsorted(known, idx, side="left")             # первый различный справа
-                for i0 in idx[tie & ((np.r_[False, tie[:-1]]) == False)]:  # начало каждого участка равенства
-                    i1 = i0
-                    while i1 + 1 < len(sgn) and tie[i1 + 1]:
-                        i1 += 1
-                    a = sgn[known[prev[i0]]] if prev[i0] >= 0 else None
-                    b = sgn[known[nxt[i1]]] if nxt[i1] < len(known) else None
-                    a, b = (b if a is None else a), (a if b is None else b)
-                    if a == b:
-                        sgn[i0:i1 + 1] = a
-                    else:                                                  # порядок меняется: плавно через 0
-                        f = (np.arange(i0, i1 + 1) - i0 + 1) / (i1 - i0 + 2)
-                        sgn[i0:i1 + 1] = a + (b - a) * f
-            me["dirs"][key] = sgn.astype(float)
-        return me["dirs"][key]
 
 
 # ---------- доп. легенда: ШИМ колес ----------
