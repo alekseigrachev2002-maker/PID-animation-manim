@@ -22,13 +22,13 @@ from visuals.layout import Frame, backdrop  # noqa: E402
 from visuals.panel import ERR, GraphPanel  # noqa: E402
 from visuals.robot import Robot  # noqa: E402
 
-
-PLAYBACK = 0.25   # замедление езды во всех сценах: 0.25 — вчетверо медленнее реального времени
-HAND = 0.5        # замедление движений «рукой» (перестановка, линия подъезжает, поворот на месте): вдвое
+GENERAL = 0.75 # общий коэфициент замедления
+PLAYBACK = 0.4 * GENERAL  # замедление езды во всех сценах: 0.25 — вчетверо медленнее реального времени
+HAND = 0.85 * GENERAL  # замедление движений «рукой» (перестановка, линия подъезжает, поворот на месте): вдвое
 
 
 class PIDScene(Scene):
-    speed = PLAYBACK   # скорость проигрывания езды — одна для всех сцен; движения «рукой» — HAND
+    speed = PLAYBACK  # скорость проигрывания езды — одна для всех сцен; движения «рукой» — HAND
 
     def setup(self):
         self.fr, self.st, self.geom, self.sensor = Frame(), Style(), Geometry(), Sensor()
@@ -47,7 +47,7 @@ class PIDScene(Scene):
         self.field = Field(self.view, track, self.sensor, self.st)
         self.robot = Robot(self.fr, self.geom, self.st, self.sensor, sensors)
         self.items = [m for m in items if m is not None]
-        self.s_off = np.zeros(2)   # перенос пути колес между отрезками, чтобы протектор не прыгал
+        self.s_off = np.zeros(2)  # перенос пути колес между отрезками, чтобы протектор не прыгал
 
         def follow(_):
             s = self.state()
@@ -71,7 +71,7 @@ class PIDScene(Scene):
         s = {**self.traj.at(t), **self.traj.signals_at(t)}
         s["sL"], s["sR"] = np.array([s["sL"], s["sR"]]) + self.s_off
         self.wheel_s = np.array([s["sL"], s["sR"]])
-        phys = np.array(model.to_channels(np.array([s["L"], s["R"]]), self.sensor))   # A0/A1 → левый/правый
+        phys = np.array(model.to_channels(np.array([s["L"], s["R"]]), self.sensor))  # A0/A1 → левый/правый
         w, b = np.asarray(self.sensor.white, float), np.asarray(self.sensor.black, float)
         s["levels"] = (phys - w) / (b - w)
         return s
@@ -110,7 +110,7 @@ class PIDScene(Scene):
             self.switch(model.move(self.track, (x, y, psi), (tx, ty, psi), t_slide, roll=False,
                                    geom=self.geom, sensor=self.sensor))
             self.advance(t_slide, speed=HAND)
-        dpsi = (tpsi - psi + np.pi) % (2 * np.pi) - np.pi      # кратчайший поворот
+        dpsi = (tpsi - psi + np.pi) % (2 * np.pi) - np.pi  # кратчайший поворот
         if abs(dpsi) > np.radians(0.5):
             self.switch(model.move(self.track, (tx, ty, psi), (tx, ty, psi + dpsi), t_turn,
                                    geom=self.geom, sensor=self.sensor))
@@ -125,16 +125,16 @@ class RunSeries(PIDScene):
         def start(self, i): ...                   # поза старта прогона i (для i > 0 — после возврата)
     """
     phrase = "Подбираем P"
-    formula = "control = err * kp"     # как в скетче урока
-    formula_colors = [("err", "e")]     # части формулы цветом своих кривых
-    law = "control"                    # в формулах колес: 150 ± control, как motors(speed + control, speed − control)
+    formula = "control = err * kp"  # как в скетче урока
+    formula_colors = [("err", "e")]  # части формулы цветом своих кривых
+    law = "control"  # в формулах колес: 150 ± control, как motors(speed + control, speed − control)
     runs = []
     signals = [ERR]
     y = ("err", -1023, 1023)
-    t_run = 2.0                        # длительность прогона, с
+    t_run = 2.0  # длительность прогона, с
     t_ticks = [0, 0.5, 1, 1.5, 2]
-    t_slide = 1.0                      # возврат: линия подъезжает, с
-    t_turn = 1.0                       # возврат: поворот на месте, с
+    t_slide = 1.0  # возврат: линия подъезжает, с
+    t_turn = 1.0  # возврат: поворот на месте, с
 
     def make_track(self):
         raise NotImplementedError
@@ -143,7 +143,7 @@ class RunSeries(PIDScene):
         raise NotImplementedError
 
     def simulate(self, pose, ctrl):
-        ctrl = Controller(**({"kp": ctrl, "kd": 0.0} if np.isscalar(ctrl) else ctrl))   # одно число — только P
+        ctrl = Controller(**({"kp": ctrl, "kd": 0.0} if np.isscalar(ctrl) else ctrl))  # одно число — только P
         return model.cached_simulate(self.track, tuple(float(v) for v in pose), ctrl=ctrl,
                                      motor=Motor(), t_end=self.t_run)
 
@@ -153,10 +153,10 @@ class RunSeries(PIDScene):
         panel = GraphPanel(self.fr, self.st, self.phrase, self.runs[0][1], self.y, self.t_run * 1.12,
                            self.t_ticks, self.signals,
                            readout=dict(signs=model.wheel_signs(Motor()), law=self.law),
-                           formula=self.formula, formula_colors=self.formula_colors)      # текст — сразу на месте
+                           formula=self.formula, formula_colors=self.formula_colors)  # текст — сразу на месте
         self.show(self.track, traj, items=[panel.readout])
         self.add(panel)
-        self.play(panel.intro(), run_time=0.8)          # заголовок выезжает слева
+        self.play(panel.intro(), run_time=0.8)  # заголовок выезжает слева
         readout = panel.readout
         for i, (ctrl, caption) in enumerate(self.runs):
             if i > 0:
@@ -164,7 +164,7 @@ class RunSeries(PIDScene):
                 self.return_to(target, self.t_slide, self.t_turn)
                 self.switch(self.simulate(target, ctrl))
                 self.play(readout.opacity.animate.set_value(1.0), run_time=0.4)
-            clock = RunClock(self.t)            # кривые растут за t во время прогона и замирают на его конце
+            clock = RunClock(self.t)  # кривые растут за t во время прогона и замирают на его конце
             curves = panel.curves(self.traj, clock)
             self.add(curves)
             self.wait(0.3)
@@ -196,12 +196,12 @@ class RunClock:
         return self.value
 
 
-QUALITIES = {   # имя → настройки Manim; рендер в любом качестве дает одинаковую картинку, меняется только резкость
-    "240p": dict(pixel_width=426, pixel_height=240, frame_rate=15),      # быстрый предпросмотр
-    "480p": dict(quality="low_quality"),                                 # 854×480, 15 к/с
-    "720p": dict(quality="medium_quality"),                              # 1280×720, 30 к/с
-    "1080p": dict(quality="high_quality"),                               # 1920×1080, 60 к/с
-    "4k": dict(quality="fourk_quality"),                                 # 3840×2160, 60 к/с
+QUALITIES = {  # имя → настройки Manim; рендер в любом качестве дает одинаковую картинку, меняется только резкость
+    "240p": dict(pixel_width=426, pixel_height=240, frame_rate=15),  # быстрый предпросмотр
+    "480p": dict(quality="low_quality"),  # 854×480, 15 к/с
+    "720p": dict(quality="medium_quality"),  # 1280×720, 30 к/с
+    "1080p": dict(quality="high_quality"),  # 1920×1080, 60 к/с
+    "4k": dict(quality="fourk_quality"),  # 3840×2160, 60 к/с
 }
 
 
@@ -213,7 +213,7 @@ def render(scene_cls, quality="480p", still=False, preview=True):
     still=True — только последний кадр: renders/<Сцена>_<качество>.png.
     """
     quality = {"low_quality": "480p", "medium_quality": "720p", "high_quality": "1080p",
-               "fourk_quality": "4k"}.get(quality, quality)                  # старые имена Manim — тоже можно
+               "fourk_quality": "4k"}.get(quality, quality)  # старые имена Manim — тоже можно
     name = scene_cls.__name__
     cfg = {**QUALITIES[quality], "preview": preview, "output_file": f"{name}_{quality}",
            "media_dir": str(ROOT / "media"), "video_dir": str(ROOT / "videos"),
