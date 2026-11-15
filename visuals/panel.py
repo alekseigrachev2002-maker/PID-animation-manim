@@ -221,28 +221,23 @@ class Plot:
         upd(g)
         return g.set_z_index(Z_UI)
 
-    def curve(self, tt, vals, color, t_end, opacity=None, width_px=3.0, peers=None):
+    def curve(self, tt, vals, color, t_end, opacity=None, width_px=3.0, offset_px=0.0):
         """Растущая кривая до момента t_end (ValueTracker или функция) с точкой на конце.
 
-        peers — общий список кривых одной траектории: где кривые ближе друг к другу, чем толщина линии,
-        они расходятся (см. SPREAD), чтобы совпадающая кривая не прятала другую.
+        offset_px — постоянный сдвиг вверх (px эталонного кадра) на всю сцену: так две кривые с одинаковыми
+        значениями лежат рядом, а не одна на другой (см. GraphPanel.curves).
         """
         fr = self.fr
         get_end = t_end.get_value if hasattr(t_end, "get_value") else t_end
         line = VMobject(stroke_color=color, stroke_width=fr.stroke(width_px))
         dot = Dot(radius=4 * fr.unit, color=color)
-        me = dict(tt=np.asarray(tt, float), vals=np.asarray(vals, float), width=width_px, order=0)
-        if peers is not None:
-            me["order"] = len(peers)
-            peers.append(me)
+        shift = np.array([0.0, offset_px * fr.unit, 0.0])
 
         def upd(m):
             te = get_end()
             i = int(np.searchsorted(tt, te, side="right"))
             ts = np.append(tt[:i], te) if i < len(tt) else tt
-            pts = self.to_screen(ts, np.interp(ts, tt, vals))
-            if peers is not None:
-                pts += self._spread(me, peers, ts, pts[:, 1])[:, None] * fr.unit * self._normals(pts)
+            pts = self.to_screen(ts, np.interp(ts, tt, vals)) + shift
             if len(pts) < 2:
                 pts = np.vstack([pts, pts])
             m[0].set_points_as_corners(pts)
@@ -254,40 +249,6 @@ class Plot:
         g = VGroup(line, dot).add_updater(upd)
         upd(g)
         return g.set_z_index(Z_UI + 1)
-
-    SPREAD = 0.35      # сдвиг совпадающих кривых, доля толщины линии в каждую сторону
-
-    @staticmethod
-    def _normals(pts):
-        """Единичные нормали к ломаной, «вверх» от нее (влево по ходу времени): на пологих участках сдвиг
-        вверх-вниз, на крутых — вбок, иначе совпадающие кривые на крутом спуске не разошлись бы."""
-        if len(pts) < 2:
-            return np.array([[0.0, 1.0, 0.0]] * len(pts))
-        tx, ty = np.gradient(pts[:, 0]), np.gradient(pts[:, 1])
-        n = np.hypot(tx, ty)
-        ok = n > 1e-12
-        out = np.zeros_like(pts)
-        out[:, 1] = 1.0
-        out[ok, 0], out[ok, 1] = -ty[ok] / n[ok], tx[ok] / n[ok]
-        return out
-
-    def _spread(self, me, peers, ts, y):
-        """Сдвиг кривой me «вверх» (px эталонного кадра, вдоль нормали) в точках ts; y — ее экранные координаты.
-
-        Сдвиг полный, когда кривые совпадают, и плавно сходит на нет к расстоянию в одну толщину линии.
-        Дорожки постоянные: кривая раньше в списке всегда уходит вверх, позже — вниз. Так на пересечении
-        кривые просто проходят друг сквозь друга — без скачка, который давал выбор «кто выше по данным».
-        """
-        out = np.zeros(len(ts))
-        for other in peers:
-            if other is me:
-                continue
-            w = (me["width"] + other["width"]) / 2
-            d_px = (y - self.to_screen(ts, np.interp(ts, other["tt"], other["vals"]))[:, 1]) / self.fr.unit
-            k = np.clip(1 - np.abs(d_px) / w, 0, 1)
-            k = k * k * (3 - 2 * k)                                      # плавно: smoothstep
-            out += self.SPREAD * w * k * (1.0 if me["order"] < other["order"] else -1.0)
-        return out
 
 
 # ---------- доп. легенда: ШИМ колес ----------
@@ -403,11 +364,17 @@ class GraphPanel(VGroup):
         self.remove(old)
         return swap(old, new)
 
-    def curve(self, traj, sig, t_end, opacity=None, peers=None):
+    def curve(self, traj, sig, t_end, opacity=None, offset_px=0.0):
         return self.plot.curve(traj.tt, getattr(traj, sig.key), color_of(self.st, sig.color), t_end, opacity,
-                               sig.width_px, peers)
+                               sig.width_px, offset_px)
 
     def curves(self, traj, t_end, opacity=None, signals=None):
-        """Кривые сигналов панели (или signals) для траектории traj; где они совпадают — расходятся."""
-        peers = []
-        return VGroup(*[self.curve(traj, s, t_end, opacity, peers) for s in (signals or self.signals)])
+        """Кривые сигналов панели (или signals) для траектории traj.
+
+        Правило сдвига: у нескольких кривых — постоянный сдвиг на всю сцену, симметрично: у двух первая
+        на +x, вторая на −x (x — половина толщины линии: совпадающие кривые лежат вплотную рядом).
+        Одна кривая не сдвигается; кривая, добавленная отдельно через curve(), — тоже (err в сцене 1).
+        """
+        sigs = list(signals or self.signals)
+        n = len(sigs)
+        return VGroup(*[self.curve(traj, s, t_end, opacity, (n - 1 - 2 * i) / 2 * s.width_px) for i, s in enumerate(sigs)])
