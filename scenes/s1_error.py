@@ -47,7 +47,7 @@ class Scene1(PIDScene):
         panel = GraphPanel(self.fr, st, "Считаем ошибку", "сигналы левого и правого датчиков",
                            y=("АЦП", 0, 1023), t_max=4.8, t_ticks=range(5), signals=[L, R], ticks=ticks)
         ref_op = ValueTracker(1.0)
-        refs = [panel.plot.hline(sens.black[0], f"чёрный ≈ {sens.black[0]}", ref_op),
+        refs = [panel.plot.hline(sens.black[0], f"черный ≈ {sens.black[0]}", ref_op),
                 panel.plot.hline(sens.white[0], f"белый ≈ {sens.white[0]}", ref_op)]
         dim = ValueTracker(1.0)
         cL, cR = panel.curves(self.traj, self.t, dim)
@@ -68,7 +68,7 @@ class Scene1(PIDScene):
         self.play(e_end.animate.set_value(self.t.get_value()), run_time=1.5, rate_func=linear)
         e_end.set_value(1e9)
 
-        # 3. ещё одно качание
+        # 3. еще одно качание
         full = round(abs(sens.white[0] - sens.black[0]), -2)        # |err|, когда датчик целиком на линии
         self.play(panel.set_caption(f"err ≈ ±{full:.0f}, датчик целиком на линии"), run_time=0.8)
         self.advance(self.traj.t[-1])

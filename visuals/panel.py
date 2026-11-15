@@ -7,13 +7,13 @@
     curves = panel.curves(traj, self.t)            # кривые всех сигналов, растут за трекером t
 
 Сигнал — что рисуем на графике: подпись в легенде, поле траектории, цвет.
-Доп. легенда — значения без кривой на графике (ШИМ колёс); обновляется каждый кадр через update_state.
+Доп. легенда — значения без кривой на графике (ШИМ колес); обновляется каждый кадр через update_state.
 """
 import warnings
 from dataclasses import dataclass
 
 import numpy as np
-from manim import (DOWN, LEFT, RIGHT, UP, DashedLine, Dot, FadeIn, FadeOut, Line, Rectangle, RoundedRectangle,
+from manim import (DOWN, LEFT, RIGHT, UP, AnimationGroup, DashedLine, Dot, FadeIn, FadeOut, Line, Rectangle, RoundedRectangle,
                    Succession, ValueTracker, VGroup, VMobject)
 
 from params import Style
@@ -45,34 +45,41 @@ def swap(old, new, shift=0.08):
 # ---------- шапка ----------
 
 class Header(VGroup):
-    """«Фраза этапа: пояснение шага» слева, блок с формулой у правого края панели."""
+    """Заголовок этапа (кегль заголовка слайда); под ним — блок с формулой и сразу за ним пояснение шага."""
 
     def __init__(self, fr, phrase, caption, st=Style()):
         super().__init__()
         self.fr, self.st = fr, st
+        self.block = None
         self.phrase = self._phrase(phrase)
         self.caption_text = caption
         self.caption = self._caption(caption)
-        self.block = None
         self.add(self.phrase, self.caption)
 
     def _phrase(self, s):
-        t = text(self.fr, s + ":", 22, self.st.text, self.st, weight="SEMIBOLD")
+        t = text(self.fr, s, self.st.title_px, self.st.text, self.st)
         return t.move_to(self.fr.px(self.fr.layout.margin_px, self.fr.layout.header_y_px),
                          aligned_edge=LEFT).set_z_index(Z_UI)
 
+    def _caption_x(self):
+        """Левый край пояснения: за блоком формулы, без блока — у края панели."""
+        fr = self.fr
+        return fr.px(fr.layout.margin_px, 0)[0] if self.block is None else self.block.get_right()[0] + 16 * fr.unit
+
     def _caption(self, s):
-        t = text(self.fr, s, 22, self.st.muted, self.st).next_to(self.phrase, RIGHT, buff=10 * self.fr.unit)
-        return on_baseline(t, baseline(self.phrase)).set_z_index(Z_UI)
+        fr = self.fr
+        t = text(fr, s, self.st.text_px, self.st.muted, self.st)
+        t.move_to([self._caption_x(), 0, 0], aligned_edge=LEFT)
+        return on_baseline(t, row_baseline(fr, fr.layout.caption_y_px, self.st)).set_z_index(Z_UI)
 
     def _block(self, s, colors):
-        """Формула как фрагмент кода: моноширинный шрифт на тёмной подложке, части формулы — цветом своих кривых.
+        """Формула как фрагмент кода: моноширинный шрифт на темной подложке, части формулы — цветом своих кривых.
 
         colors: [(часть формулы, цвет)] — все вхождения, или (часть, цвет, n) — только n-е вхождение (с нуля);
         например [("err", st.e)] или [("-150", L), ("150", R, 1)]. Позже в списке — главнее.
         """
         fr, st = self.fr, self.st
-        t = text(fr, s, 19, st.text, st, font=pick_font(st.code_font))
+        t = text(fr, s, st.text_px, st.text, st, font=pick_font(st.code_font))
         glyphs = s.replace(" ", "")
         for part, color, *n in colors:
             part = part.replace(" ", "")
@@ -83,16 +90,18 @@ class Header(VGroup):
             for i in (hits if not n else hits[n[0]:n[0] + 1]):
                 for k in range(i, i + len(part)):
                     t[k].set_color(color)
-        t.move_to(fr.px(fr.layout.graph_w_px - fr.layout.margin_px - 14, 0), aligned_edge=RIGHT)
-        on_baseline(t, baseline(self.phrase))
-        box = RoundedRectangle(corner_radius=6 * fr.unit, width=t.width + 28 * fr.unit, height=36 * fr.unit,
-                               stroke_width=0, fill_color=st.block, fill_opacity=1).move_to(t)
+        t.move_to(fr.px(fr.layout.margin_px + 14, 0), aligned_edge=LEFT)
+        on_baseline(t, row_baseline(fr, fr.layout.caption_y_px, st))
+        box = RoundedRectangle(corner_radius=7 * fr.unit, width=t.width + 28 * fr.unit, height=44 * fr.unit,
+                               stroke_width=0, fill_color=st.block, fill_opacity=1)
+        box.move_to([t.get_center()[0], row_baseline(fr, fr.layout.caption_y_px, st) + 0.3 * st.text_px * fr.unit, 0])
         return VGroup(box, t).set_z_index(Z_UI)
 
     def _check_fit(self):
-        """Пояснение не должно налезать на блок формулы — иначе предупреждение при рендере."""
-        if self.block is not None and self.caption.get_right()[0] > self.block.get_left()[0] - 12 * self.fr.unit:
-            warnings.warn(f"шапка: пояснение «{self.caption_text}» налезает на блок формулы — сократите текст")
+        """Заголовок не должен налезать на блок формулы, пояснение — выходить за панель; иначе предупреждение."""
+        fr = self.fr
+        if self.caption.get_right()[0] > fr.px(fr.layout.graph_w_px - fr.layout.margin_px, 0)[0]:
+            warnings.warn(f"шапка: пояснение «{self.caption_text}» не помещается в панель — сократите текст")
 
     def _swap(self, attr, new):
         old = getattr(self, attr)
@@ -103,9 +112,13 @@ class Header(VGroup):
         return swap(old, new)
 
     def set_formula(self, s, colors=()):
+        """Новая формула; пояснение отъезжает, чтобы стоять сразу за блоком."""
         anim = self._swap("block", self._block(s, colors))
+        dx = self._caption_x() - self.caption.get_left()[0]
         self._check_fit()
-        return anim
+        if abs(dx) < 1e-6:
+            return anim
+        return AnimationGroup(anim, self.caption.animate.shift(dx * RIGHT))
 
     def set_caption(self, s):
         self.caption_text = s
@@ -120,24 +133,29 @@ class Header(VGroup):
 
 # ---------- легенда ----------
 
-def legend_baseline(fr):
-    return fr.px(0, fr.layout.legend_y_px + 5)[1]
+def row_baseline(fr, y_px, st=Style()):
+    """Линия шрифта строки текста кегля text_px с серединой строчных букв на y_px."""
+    return fr.px(0, y_px + 0.25 * st.text_px)[1]
+
+
+def legend_baseline(fr, st=Style()):
+    return row_baseline(fr, fr.layout.legend_y_px, st)
 
 
 def legend(fr, items, x_px=None, st=Style()):
     """Одна строка внизу панели. items: Signal или (Signal, непрозрачность)."""
-    x0 = fr.layout.plot_px[0] if x_px is None else x_px
-    y = legend_baseline(fr)
+    x0 = fr.layout.margin_px if x_px is None else x_px
+    y = legend_baseline(fr, st)
     g, x = VGroup(), fr.px(x0, 0)[0]
     for it in items:
         sig, op = it if isinstance(it, tuple) else (it, 1.0)
-        lab = text(fr, sig.label, 16, st.text, st)
-        sw = Line(ORIGIN_PT, RIGHT * 24 * fr.unit, color=color_of(st, sig.color), stroke_width=fr.stroke(3),
+        lab = text(fr, sig.label, st.text_px, st.text, st)
+        sw = Line(ORIGIN_PT, RIGHT * 30 * fr.unit, color=color_of(st, sig.color), stroke_width=fr.stroke(4),
                   stroke_opacity=op)
-        sw.move_to([x, y + 5 * fr.unit, 0], aligned_edge=LEFT)          # середина строчных букв
+        sw.move_to([x, y + 0.25 * st.text_px * fr.unit, 0], aligned_edge=LEFT)          # середина строчных букв
         lab.move_to([sw.get_right()[0] + 10 * fr.unit, 0, 0], aligned_edge=LEFT)
         g.add(VGroup(sw, on_baseline(lab, y)))
-        x = lab.get_right()[0] + 36 * fr.unit
+        x = lab.get_right()[0] + 40 * fr.unit
     return g.set_z_index(Z_UI)
 
 
@@ -171,12 +189,13 @@ class Plot:
         x_axis = Line(fr.px(x0, y1), fr.px(x1, y1), color=st.axis, stroke_width=w)
         x_axis.add_updater(lambda m: m.put_start_and_end_on(*self.to_screen([0, self.t_max], [self._zero()] * 2)))
         g = VGroup(y_axis, x_axis)
+        small = st.small_px
         for tk in t_ticks:
-            g.add(text(fr, f"{tk:g}", 13, st.muted, st).move_to(fr.px(x0 + tk / self.t_max * (x1 - x0), y1 + 16)))
-        g.add(text(fr, "t, с", 13, st.muted, st).move_to(fr.px(x1 + 14, y1 + 16), aligned_edge=LEFT))
-        g.add(text(fr, y_label, 13, st.muted, st).move_to(fr.px(x0 + 8, y0 - 12), aligned_edge=LEFT))
+            g.add(text(fr, f"{tk:g}", small, st.muted, st).move_to(fr.px(x0 + tk / self.t_max * (x1 - x0), y1 + 20)))
+        g.add(text(fr, "t, с", small, st.muted, st).move_to(fr.px(x1 + 14, y1 + 20), aligned_edge=LEFT))
+        g.add(text(fr, y_label, small, st.muted, st).move_to(fr.px(x0 + 8, y0 - 16), aligned_edge=LEFT))
         for val, op in ticks.items():
-            lab = text(fr, f"{val:g}".replace("-", "−"), 13, st.muted, st)
+            lab = text(fr, f"{val:g}".replace("-", "−"), small, st.muted, st)
             lab.add_updater(lambda m, val=val, op=op: m.move_to(
                 self.to_screen([0], [val])[0] + LEFT * 10 * fr.unit, aligned_edge=RIGHT).set_opacity(
                 op(self.lo.get_value(), self.hi.get_value())))
@@ -187,12 +206,12 @@ class Plot:
         """Пунктир-ориентир с подписью справа; opacity — ValueTracker."""
         fr, st = self.fr, self.st
         ln = DashedLine(ORIGIN_PT, RIGHT, color=st.muted, stroke_width=fr.stroke(1), dash_length=4 * fr.unit)
-        lab = text(fr, label, 12, st.muted, st)
+        lab = text(fr, label, st.small_px, st.muted, st)
 
         def upd(m):
             a, b = self.to_screen([0, self.t_max], [value, value])
             m[0].put_start_and_end_on(a, b)
-            m[1].next_to(b, UP, buff=4 * fr.unit).align_to(b, RIGHT)
+            m[1].next_to(a, UP, buff=4 * fr.unit).align_to(a, LEFT).shift(12 * fr.unit * RIGHT)   # слева: справа идут кривые
             m.set_opacity(opacity.get_value())
 
         g = VGroup(ln, lab).add_updater(upd)
@@ -237,7 +256,7 @@ class Plot:
 
     @staticmethod
     def _normals(pts):
-        """Единичные нормали к ломаной, «вверх» от неё (влево по ходу времени): на пологих участках сдвиг
+        """Единичные нормали к ломаной, «вверх» от нее (влево по ходу времени): на пологих участках сдвиг
         вверх-вниз, на крутых — вбок, иначе совпадающие кривые на крутом спуске не разошлись бы."""
         if len(pts) < 2:
             return np.array([[0.0, 1.0, 0.0]] * len(pts))
@@ -250,7 +269,7 @@ class Plot:
         return out
 
     def _spread(self, me, peers, ts, y):
-        """Сдвиг кривой me «вверх» (px эталонного кадра, вдоль нормали) в точках ts; y — её экранные координаты.
+        """Сдвиг кривой me «вверх» (px эталонного кадра, вдоль нормали) в точках ts; y — ее экранные координаты.
 
         Сдвиг полный, когда кривые совпадают, и плавно сходит на нет к расстоянию в одну толщину линии.
         Направление — какая кривая выше по данным, та и уходит вверх. На участке точного равенства — как кривые
@@ -301,7 +320,7 @@ class Plot:
         return me["dirs"][key]
 
 
-# ---------- доп. легенда: ШИМ колёс ----------
+# ---------- доп. легенда: ШИМ колес ----------
 
 class Number(VGroup):
     """Целое число из фиксированных слотов под символы; левый край и линия шрифта задаются точкой.
@@ -334,32 +353,32 @@ class Number(VGroup):
 
 
 class MotorReadout(VGroup):
-    """«▬ левый мотор 150 + control = 255   ▬ правый мотор 150 − control = 45» — ШИМ физических колёс.
+    """«▬ левый 150 + control = 255   ▬ правый 150 − control = 45» — ШИМ физических колес (своя строка).
 
     Полоска — цвет оси колеса на роботе; знаки — из подключения моторов (model.wheel_signs).
-    Число стоит сразу после «=»; следующая группа отстоит на ширину самого длинного числа — строка не дёргается.
+    Число стоит сразу после «=»; следующая группа отстоит на ширину самого длинного числа — строка не дергается.
     opacity — ValueTracker: приглушать на время возврата между прогонами.
     """
-    NUM_W = 40   # место под самое длинное число («−255»), px
-    PX = 15      # кегль строки, px
+    NUM_W = 54   # место под самое длинное число («−255»), px
 
     def __init__(self, fr, x_px, signs, law="control", st=Style()):
         super().__init__()
         self.fr, self.st = fr, st
+        self.PX = st.text_px
         self.opacity = ValueTracker(1.0)
-        y = legend_baseline(fr)
+        y = row_baseline(fr, fr.layout.readout_y_px, st)
         self.texts, self.numbers, self.anchors = VGroup(), VGroup(), []
         x = fr.px(x_px, 0)[0]
-        for name, sign, color in (("левый мотор", signs[0], st.L), ("правый мотор", signs[1], st.R)):
-            sw = Rectangle(width=14 * fr.unit, height=7 * fr.unit, stroke_width=0, fill_color=color, fill_opacity=1)
-            sw.move_to([x, y + 5 * fr.unit, 0], aligned_edge=LEFT)
+        for name, sign, color in (("левый", signs[0], st.L), ("правый", signs[1], st.R)):
+            sw = Rectangle(width=18 * fr.unit, height=9 * fr.unit, stroke_width=0, fill_color=color, fill_opacity=1)
+            sw.move_to([x, y + 0.25 * st.text_px * fr.unit, 0], aligned_edge=LEFT)
             lab = text(fr, name, self.PX, st.text, st)
             lab.move_to([sw.get_right()[0] + 8 * fr.unit, 0, 0], aligned_edge=LEFT)
             frm = text(fr, f"150 {'+' if sign > 0 else '−'} {law} =", self.PX, st.muted, st)
             on_baseline(lab, y)
             frm.move_to([lab.get_right()[0] + 10 * fr.unit, 0, 0], aligned_edge=LEFT)
             on_baseline(frm, y)
-            left = frm.get_right()[0] + 6 * fr.unit
+            left = frm.get_right()[0] + 10 * fr.unit
             self.anchors.append(np.array([left, y, 0.0]))
             self.texts.add(VGroup(sw, lab, frm))
             self.numbers.add(Number(fr, self.PX, st.text, st))
@@ -380,7 +399,7 @@ class MotorReadout(VGroup):
 # ---------- панель целиком ----------
 
 class GraphPanel(VGroup):
-    """Шапка + блок формулы + график с сигналами + легенда из сигналов + доп. легенда (ШИМ колёс)."""
+    """Шапка + блок формулы + график с сигналами + легенда из сигналов + доп. легенда (ШИМ колес)."""
 
     def __init__(self, fr, st, phrase, caption, y, t_max, t_ticks, signals, ticks=None, readout=None):
         super().__init__()
@@ -393,12 +412,12 @@ class GraphPanel(VGroup):
         self.legend = legend(fr, self.signals, st=st)
         self.add(self.header, self.axes, self.legend)
         self.readout = None
-        if readout is not None:
-            x_px = fr.to_px_x(self.legend.get_right()[0]) + 40
-            self.readout = MotorReadout(fr, x_px, st=st, **readout)
-        right = (self.readout or self.legend).get_right()[0]
-        if right > fr.px(fr.layout.graph_w_px - fr.layout.margin_px, 0)[0]:
-            warnings.warn("нижняя строка (легенда и ШИМ колёс) не помещается в панель — сократите подписи сигналов")
+        if readout is not None:                           # своя строка под легендой, от левого края графика
+            self.readout = MotorReadout(fr, fr.layout.margin_px, st=st, **readout)
+        limit = fr.px(fr.layout.graph_w_px - fr.layout.margin_px, 0)[0]
+        for row, name in ((self.legend, "легенда"), (self.readout, "строка ШИМ колес")):
+            if row is not None and row.get_right()[0] > limit:
+                warnings.warn(f"{name} не помещается в панель — сократите подписи")
 
     def set_formula(self, s, colors=(("err", "e"),)):
         """Формула в шапке; colors — какие части каким цветом: [("err", "e"), ("kd·Δerr", "D")]."""

@@ -56,7 +56,7 @@ def test_turned_left_heading_decreases():
     assert traj.psi[-1] < traj.psi[0]
 
 
-# Мёртвая зона из геометрии: оба датчика на белом, пока до края линии больше 3σ.
+# Мертвая зона из геометрии: оба датчика на белом, пока до края линии больше 3σ.
 # Смещение на x: датчик в sensor_x − x от осевой. Поворот на ψ: боковое положение датчика
 # sensor_x·cosψ − sensor_y·sinψ = r·sin(α − ψ), где r — расстояние до датчика, α = atan2(sensor_x, sensor_y).
 DZ_X = G.sensor_x - S.line_width / 2 - 3 * S.sigma
@@ -82,7 +82,7 @@ def test_outside_dead_zone(sign):
 
 
 def test_dead_zone_numbers_for_field_line():
-    """Линия поля 30 мм: мёртвая зона узкая — около ±1.5 мм и ±0.8°."""
+    """Линия поля 30 мм: мертвая зона узкая — около ±1.5 мм и ±0.8°."""
     assert S.line_width == 30
     assert DZ_X == pytest.approx(1.29, abs=0.05) and DZ_PSI == pytest.approx(0.8, abs=0.1)
 
@@ -203,7 +203,7 @@ def test_drive_below_start_threshold_stays():
 
 
 def test_drive_spin_in_place_keeps_axle():
-    tr = model.drive(LINE, (0.0, 0.0, 0.0), (-150, 150), 1.0)       # левое назад, правое вперёд
+    tr = model.drive(LINE, (0.0, 0.0, 0.0), (-150, 150), 1.0)       # левое назад, правое вперед
     assert np.hypot(tr.x, tr.y).max() < 1e-6
     assert tr.psi[-1] > 1.0                                           # повернулся влево (против часовой)
 
@@ -259,7 +259,7 @@ def test_drive_ramp_then_stop():
     assert tr.pwmL[-1] == 0 and tr.speed_at(tr.t[-1])[0] < 5                     # потом стоп и докатился
 
 
-# ---------- перекрёсток (сцена 3) ----------
+# ---------- перекресток (сцена 3) ----------
 
 CROSS = track.Track(track.Route(start=(0, -100), heading="вверх").forward(600),
                     track.Route(start=(-150, 300), heading="вправо").forward(300))
@@ -272,11 +272,11 @@ def test_stop_below_ends_on_crossing():
     assert np.all((run.L >= 300) | (run.R >= 300))
     L, R = model.read_sensors(CROSS, (run.x[-1], run.y[-1], run.psi[-1]), G, S)
     assert max(L, R) < 320                                  # поза — за 1 мс (GRID) до тика стопа
-    assert abs(run.y[-1] + G.sensor_y - 300) < 15           # датчики на полосе перекрёстка
+    assert abs(run.y[-1] + G.sensor_y - 300) < 15           # датчики на полосе перекрестка
 
 
 def test_brake_waits_for_delay():
-    """Стоп доходит до колёс через Motor.delay: первые delay секунд робот едет, как ехал."""
+    """Стоп доходит до колес через Motor.delay: первые delay секунд робот едет, как ехал."""
     m = Motor(delay=0.02)
     run = model.simulate(LINE, (0.0, 0.0, 0.0), t_end=0.5, motor=m)
     stop = model.brake(LINE, run, motor=m)

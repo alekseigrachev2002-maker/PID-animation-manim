@@ -1,6 +1,6 @@
-"""Робот сверху. Строится в мм (система робота: +y вперёд); на экран ставится методом place().
+"""Робот сверху. Строится в мм (система робота: +y вперед); на экран ставится методом place().
 
-Части: колёса с протектором, оси (цвет стороны), шасси, платы датчиков с метками (флажок sensors).
+Части: колеса с протектором, оси (цвет стороны), шасси, платы датчиков с метками (флажок sensors).
 Оптопара TCRT стоит на нижней стороне платы и сверху не видна — не рисуем.
 """
 import numpy as np
@@ -9,8 +9,8 @@ from manim import WHITE, Circle, Difference, ManimColor, Rectangle, RoundedRecta
 
 from params import Geometry, Sensor, Style
 
-HALO_R = (11.0, 8.0, 5.5)   # ореол метки: круги внахлёст, к краю свечение слабее
-N_TREAD = 18                # шевронов ёлочки по окружности колеса
+HALO_R = (11.0, 8.0, 5.5)   # ореол метки: круги внахлест, к краю свечение слабее
+N_TREAD = 18                # шевронов елочки по окружности колеса
 Z = dict(wheel=1, tread=2, axle=2.5, board=3, chassis=4, marker=5)
 
 
@@ -20,7 +20,7 @@ def _rect(w, h, cx, cy, r=0.0, **kw):
 
 
 def chassis(g: Geometry, st: Style, edge_w):
-    """Шасси: круг с вырезами под колёса."""
+    """Шасси: круг с вырезами под колеса."""
     x0, x1 = g.cutout_x
     cuts = [_rect(x1 - x0, g.cutout_h, s * (x0 + x1) / 2, 0, g.cutout_r) for s in (-1, 1)]
     body = Difference(Circle(radius=g.chassis_r), Union(*cuts))
@@ -40,7 +40,7 @@ def axles(g: Geometry, st: Style):
 
 
 def board_colors(st: Style, sensor: Sensor):
-    """Цвета плат [левая, правая] = цвет сигнала, который с неё идёт (L на A0, R на A1)."""
+    """Цвета плат [левая, правая] = цвет сигнала, который с нее идет (L на A0, R на A1)."""
     return (st.R, st.L) if sensor.swapped else (st.L, st.R)
 
 
@@ -68,7 +68,7 @@ def markers(g: Geometry, st: Style, sensor: Sensor):
 
 
 def marker_core(color, level):
-    """Цвет ядра метки: тёмный оттенок платы (белое под датчиком) → почти белый (чёрное)."""
+    """Цвет ядра метки: темный оттенок платы (белое под датчиком) → почти белый (черное)."""
     dim = interpolate_color(ManimColor(color), ManimColor("#000000"), 0.45)
     return interpolate_color(dim, WHITE, 0.85 * level)
 
@@ -78,8 +78,8 @@ def tread_points(g: Geometry, side, phase):
 
     Шеврон нарисован на цилиндре колеса: каждая его точка задана углом φ от верхней точки колеса и
     проецируется отдельно, y = R·sin φ. У края колеса шеврон сплющивается вдоль окружности, утончается
-    (толщина ∝ cos φ) и сливается с краем; за краем (cos φ < 0) — невидим. Ёлочка смотрит вершиной вперёд;
-    при езде вперёд верх колеса движется вперёд относительно корпуса.
+    (толщина ∝ cos φ) и сливается с краем; за краем (cos φ < 0) — невидим. Елочка смотрит вершиной вперед;
+    при езде вперед верх колеса движется вперед относительно корпуса.
     """
     R, hw = g.wheel_d / 2, g.wheel_w / 2 - 1.2
     xc = side * g.wheel_x
@@ -129,7 +129,7 @@ class Robot(VGroup):
         return self
 
     def set_signals(self, lv_left, lv_right):
-        """Яркость меток физических датчиков [левый, правый]: 0 — белое под датчиком, 1 — чёрное."""
+        """Яркость меток физических датчиков [левый, правый]: 0 — белое под датчиком, 1 — черное."""
         for (halo, core), lv, color in zip(self.markers, (lv_left, lv_right), board_colors(self.st, self.sensor)):
             lv = float(np.clip(lv, 0, 1))
             for ring in halo:
@@ -138,7 +138,7 @@ class Robot(VGroup):
         return self
 
     def set_wheel_phase(self, sL, sR):
-        """sL, sR — путь колёс в мм; фаза протектора = s / R."""
+        """sL, sR — путь колес в мм; фаза протектора = s / R."""
         R = self.geom.wheel_d / 2
         i = 0
         for side, s in ((-1, sL), (1, sR)):

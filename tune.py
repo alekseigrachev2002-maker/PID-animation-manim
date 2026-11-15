@@ -17,9 +17,9 @@ T_RUN = Scene2b.t_run
 
 
 def fits(track, pose, kp, kd=0.0):
-    """Вписался: за прогон не потерял линию."""
+    """Вписался: за прогон не ушел от линии, и в конце она между датчиками (а не сбоку от робота)."""
     run = model.simulate(track, pose, ctrl=Controller(kp=kp, kd=kd), t_end=T_RUN, motor=Motor(delay=DELAY))
-    return bool(np.isnan(run.lost_at))
+    return bool(np.isnan(run.lost_at)) and not model.off_line(track, (run.x[-1], run.y[-1], run.psi[-1]))
 
 
 def main():

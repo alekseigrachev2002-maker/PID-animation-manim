@@ -1,6 +1,6 @@
 """Основа сцен.
 
-PIDScene — стенд: трекер времени t, камера, поле, робот и элементы, которым каждый кадр раздаётся состояние.
+PIDScene — стенд: трекер времени t, камера, поле, робот и элементы, которым каждый кадр раздается состояние.
 RunSeries — серия прогонов регулятора: прогон → стоп → возврат → следующий (сцены 2a, 2b и дальше).
 render() — запуск кнопкой ▶ в PyCharm.
 """
@@ -43,7 +43,7 @@ class PIDScene(Scene):
         self.field = Field(self.view, track, self.sensor, self.st)
         self.robot = Robot(self.fr, self.geom, self.st, self.sensor, sensors)
         self.items = [m for m in items if m is not None]
-        self.s_off = np.zeros(2)   # перенос пути колёс между отрезками, чтобы протектор не прыгал
+        self.s_off = np.zeros(2)   # перенос пути колес между отрезками, чтобы протектор не прыгал
 
         def follow(_):
             s = self.state()
@@ -62,7 +62,7 @@ class PIDScene(Scene):
         self.add(self.field, self.robot, *self.items)
 
     def state(self):
-        """Состояние в момент t: поза, путь колёс, сигналы регулятора, яркость меток датчиков."""
+        """Состояние в момент t: поза, путь колес, сигналы регулятора, яркость меток датчиков."""
         t = self.t.get_value()
         s = {**self.traj.at(t), **self.traj.signals_at(t)}
         s["sL"], s["sR"] = np.array([s["sL"], s["sR"]]) + self.s_off
@@ -73,7 +73,7 @@ class PIDScene(Scene):
         return s
 
     def switch(self, traj, t=0.0):
-        """Подменить проигрываемую траекторию (новый прогон или переход); путь колёс продолжается.
+        """Подменить проигрываемую траекторию (новый прогон или переход); путь колес продолжается.
 
         Проверка стыка: скорость и вращение робота до и после должны совпадать — иначе предупреждение.
         """
@@ -98,7 +98,7 @@ class PIDScene(Scene):
         self.play(self.t.animate.set_value(t_to), *extra, run_time=dur, rate_func=linear)
 
     def return_to(self, target, t_slide=1.0, t_turn=1.0):
-        """Возврат между прогонами: линия подъезжает так, что середина оси встаёт в target[:2] (колёса не крутятся),
+        """Возврат между прогонами: линия подъезжает так, что середина оси встает в target[:2] (колеса не крутятся),
         затем робот поворачивается на месте на курс target[2]."""
         x, y, psi = self.end_pose()
         tx, ty, tpsi = target
@@ -114,7 +114,7 @@ class PIDScene(Scene):
 
 
 class RunSeries(PIDScene):
-    """Серия прогонов регулятора по одной трассе. Сцена задаёт трассу, старт и прогоны:
+    """Серия прогонов регулятора по одной трассе. Сцена задает трассу, старт и прогоны:
 
         runs = [(0.3, "kp = 0.3, едет по линии"), (dict(kp=0.3, kd=2), "с D")]   # kp или параметры регулятора
         def make_track(self): ...                 # трасса
@@ -123,7 +123,7 @@ class RunSeries(PIDScene):
     phrase = "Подбираем P"
     formula = "control = err * kp"     # как в скетче урока
     formula_colors = [("err", "e")]     # части формулы цветом своих кривых
-    law = "control"                    # в формулах колёс: 150 ± control, как motors(speed + control, speed − control)
+    law = "control"                    # в формулах колес: 150 ± control, как motors(speed + control, speed − control)
     runs = []
     signals = [ERR]
     y = ("err", -1023, 1023)
@@ -179,7 +179,7 @@ class RunSeries(PIDScene):
 
 
 class RunClock:
-    """Время для кривых прогона: идёт за трекером t, после stop() замирает (дальше t перезапускается)."""
+    """Время для кривых прогона: идет за трекером t, после stop() замирает (дальше t перезапускается)."""
 
     def __init__(self, t):
         self.t, self.live, self.value = t, True, 0.0
@@ -193,7 +193,7 @@ class RunClock:
         return self.value
 
 
-QUALITIES = {   # имя → настройки Manim; рендер в любом качестве даёт одинаковую картинку, меняется только резкость
+QUALITIES = {   # имя → настройки Manim; рендер в любом качестве дает одинаковую картинку, меняется только резкость
     "240p": dict(pixel_width=426, pixel_height=240, frame_rate=15),      # быстрый предпросмотр
     "480p": dict(quality="low_quality"),                                 # 854×480, 15 к/с
     "720p": dict(quality="medium_quality"),                              # 1280×720, 30 к/с

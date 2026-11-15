@@ -1,6 +1,6 @@
 """Физика робота: датчики, моторы, кинематика, регулятор. Без Manim.
 
-Поза: (x, y, psi), psi — курс от +y против часовой (psi > 0 — повёрнут влево).
+Поза: (x, y, psi), psi — курс от +y против часовой (psi > 0 — повернут влево).
 Регулятор дискретный (ZOH между тиками), робот непрерывный: solve_ivp от тика до тика.
 """
 import hashlib
@@ -37,13 +37,13 @@ def sensor_points(pose, geom: Geometry):
 
 
 def strip_coverage(d, width, sigma):
-    """Доля гауссова пятна, попавшая на полосу ширины width; d — расстояние до её оси."""
+    """Доля гауссова пятна, попавшая на полосу ширины width; d — расстояние до ее оси."""
     k = 1 / (sigma * np.sqrt(2))
     return 0.5 * (erf((width / 2 - d) * k) + erf((width / 2 + d) * k))
 
 
 def coverage(track, pts, sensor: Sensor):
-    """Покрытие с учётом всех линий трассы: 1 − Π(1 − c_k)."""
+    """Покрытие с учетом всех линий трассы: 1 − Π(1 − c_k)."""
     free = np.ones(len(pts))
     for d in track.distances(pts):
         free *= 1 - strip_coverage(d, sensor.line_width, sensor.sigma)
@@ -93,12 +93,12 @@ def motor_pwm(u, ctrl: Controller):
 
 
 def wheel_signs(motor: Motor):
-    """Знаки u в скорости физических колёс: ШИМ левого = speed + sL·u, правого = speed + sR·u."""
+    """Знаки u в скорости физических колес: ШИМ левого = speed + sL·u, правого = speed + sR·u."""
     return (-1, 1) if motor.swapped else (1, -1)
 
 
 def wheel_pwm(u, ctrl: Controller, motor: Motor):
-    """ШИМ на физических колёсах (левое, правое) с учётом того, как моторы подключены к IN1…IN4."""
+    """ШИМ на физических колесах (левое, правое) с учетом того, как моторы подключены к IN1…IN4."""
     a, b = motor_pwm(u, ctrl)
     return (b, a) if motor.swapped else (a, b)
 
@@ -119,13 +119,13 @@ def wheel_target(pwm, moving, motor: Motor):
 
 
 def turn_targets(vt, motor: Motor):
-    """Скорости, к которым тянутся колёса: от разницы целевых до поворота доходит доля Motor.turn_share."""
+    """Скорости, к которым тянутся колеса: от разницы целевых до поворота доходит доля Motor.turn_share."""
     mid, half = (vt[0] + vt[1]) / 2, (vt[0] - vt[1]) / 2 * motor.turn_share
     return mid + half, mid - half
 
 
 def delayed(lag, cmd):
-    """Очередь задержки: кладём новую команду, достаём самую старую (пустая очередь — без задержки)."""
+    """Очередь задержки: кладем новую команду, достаем самую старую (пустая очередь — без задержки)."""
     lag.append(cmd)
     return lag.popleft()
 
@@ -162,7 +162,7 @@ class Trajectory:
     uD: np.ndarray
     pwmL: np.ndarray
     pwmR: np.ndarray
-    lost_at: float = np.nan   # время схода с линии (nan — не сошёл)
+    lost_at: float = np.nan   # время схода с линии (nan — не сошел)
 
     def at(self, t):
         """Поза и скорости в момент t (линейная интерполяция по сетке GRID)."""
@@ -210,10 +210,10 @@ def _wheel_step(s, moving, cmd, t0, dt, motor: Motor, geom: Geometry):
 
 def simulate(track, pose0, ctrl=Controller(), t_end=5.0, geom=Geometry(), sensor=Sensor(),
              motor=Motor(), v0=0.0, seed=0, lost_dist=100.0, stop_below=None):
-    """Езда по трассе. v0 — начальная скорость колёс (по умолчанию робот стоит и трогается сам).
+    """Езда по трассе. v0 — начальная скорость колес (по умолчанию робот стоит и трогается сам).
 
     Останавливается, если середина оси дальше lost_dist от всех линий.
-    stop_below — порог перекрёстка: на тике, где L и R оба ниже него, регулятор не вызывается и траектория
+    stop_below — порог перекрестка: на тике, где L и R оба ниже него, регулятор не вызывается и траектория
     кончается (как в скетче: if (L < порог && R < порог) motors(0, 0); else followLine();) — дальше brake().
     """
     rng = np.random.default_rng(seed)
@@ -244,10 +244,10 @@ def simulate(track, pose0, ctrl=Controller(), t_end=5.0, geom=Geometry(), sensor
 
 
 def _commanded(track, s, moving, cmd, t_on, ctrl, geom, sensor, motor, stop=False, t_guard=30.0, pending=None):
-    """Езда без регулятора: команды ШИМ колёсам cmd(t) → (левое, правое) пока t < t_on.
+    """Езда без регулятора: команды ШИМ колесам cmd(t) → (левое, правое) пока t < t_on.
 
     stop: затем motors(0, 0), пока оба колеса не встанут — в той же траектории (график видит и стоп).
-    pending — команды, ещё идущие по очереди задержки; по умолчанию нули (робот стоял):
+    pending — команды, еще идущие по очереди задержки; по умолчанию нули (робот стоял):
     новые команды начинают действовать через Motor.delay.
     """
     cont, ticks = [], []
@@ -267,16 +267,16 @@ def _commanded(track, s, moving, cmd, t_on, ctrl, geom, sensor, motor, stop=Fals
         if not on and not any(moving):
             break
         if t0 > t_on + t_guard:
-            raise RuntimeError(f"колёса не встали за {t_guard} с — проверьте Motor.tau и stop_eps")
+            raise RuntimeError(f"колеса не встали за {t_guard} с — проверьте Motor.tau и stop_eps")
         k += 1
     return _pack(np.hstack(cont), np.array(ticks), np.nan)
 
 
 def brake(track, traj, ctrl=Controller(), geom=Geometry(), sensor=Sensor(), motor=Motor()):
-    """Остановка после прогона: motors(0, 0), робот докатывается, пока колёса не встанут.
+    """Остановка после прогона: motors(0, 0), робот докатывается, пока колеса не встанут.
 
-    Стартует из конца траектории traj с теми же скоростями колёс; путь колёс продолжается.
-    Последние команды регулятора ещё в очереди задержки — колёса узнают о стопе через Motor.delay.
+    Стартует из конца траектории traj с теми же скоростями колес; путь колес продолжается.
+    Последние команды регулятора еще в очереди задержки — колеса узнают о стопе через Motor.delay.
     """
     s = np.array([traj.x[-1], traj.y[-1], traj.psi[-1], traj.vL[-1], traj.vR[-1], traj.sL[-1], traj.sR[-1]])
     moving = [abs(s[3]) > motor.stop_eps, abs(s[4]) > motor.stop_eps]
@@ -287,7 +287,7 @@ def brake(track, traj, ctrl=Controller(), geom=Geometry(), sensor=Sensor(), moto
 
 
 def drive(track, pose0, pwm, t_on, stop=False, ctrl=Controller(), geom=Geometry(), sensor=Sensor(), motor=Motor()):
-    """Езда с места без регулятора: ШИМ физических колёс pwm = (левое, правое) или функция pwm(t) → (лев, прав).
+    """Езда с места без регулятора: ШИМ физических колес pwm = (левое, правое) или функция pwm(t) → (лев, прав).
 
     Разгон, порог трогания, отставание — по физике мотора. stop: после t_on — motors(0, 0) и докатывание.
     """
@@ -297,7 +297,7 @@ def drive(track, pose0, pwm, t_on, stop=False, ctrl=Controller(), geom=Geometry(
 
 
 def off_line(track, pose, geom=Geometry(), sensor=Sensor(), seen=0.02):
-    """Робот потерял линию: ни один датчик её не видит и оба лежат по одну сторону от неё."""
+    """Робот потерял линию: ни один датчик ее не видит и оба лежат по одну сторону от нее."""
     pts = sensor_points(pose, geom)
     if coverage(track, pts, sensor).max() > seen:
         return False
@@ -310,7 +310,7 @@ def smoothstep(s):
 
 
 def move(track, pose_a, pose_b, duration, roll=True, dt=0.005, geom=Geometry(), sensor=Sensor()):
-    """Плавный переход позы a → b за duration (возврат между прогонами). roll=False — колёса не крутятся
+    """Плавный переход позы a → b за duration (возврат между прогонами). roll=False — колеса не крутятся
     (робота переставили / линия подъехала)."""
     t = np.arange(0, duration + dt / 2, dt)
     s = smoothstep(t / duration)
@@ -330,7 +330,7 @@ def prescribed(track, t, x, y, psi, geom=Geometry(), sensor=Sensor(), ctrl=Contr
     phys = np.array([read_sensors(track, p, geom, sensor, rng) for p in zip(x, y, psi)])
     LR = np.column_stack(to_channels(phys, sensor))
     e = error(LR[:, 0], LR[:, 1], ctrl)
-    # путь колёс: смещение по траектории ± поворот вокруг оси
+    # путь колес: смещение по траектории ± поворот вокруг оси
     ds = np.concatenate([[0], np.cumsum(np.hypot(np.diff(x), np.diff(y)))])
     turn = geom.track_width / 2 * (psi - psi[0])
     z = np.zeros_like(t)
@@ -340,7 +340,7 @@ def prescribed(track, t, x, y, psi, geom=Geometry(), sensor=Sensor(), ctrl=Contr
 
 
 def chain(*trajs):
-    """Склеить отрезки в одну траекторию: время и путь колёс каждого продолжают предыдущий.
+    """Склеить отрезки в одну траекторию: время и путь колес каждого продолжают предыдущий.
 
     Для графика через всю сцену (стоит → переставили → едет → стоп). Стык — в покое или run → brake.
     """

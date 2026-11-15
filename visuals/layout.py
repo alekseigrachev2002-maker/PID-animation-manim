@@ -8,7 +8,7 @@ from manim import UP, DOWN, Rectangle, Text, VGroup, config
 from params import Layout, Style
 
 Z_PANEL = 10   # панель графиков закрывает поле
-Z_UI = 12      # всё, что на панели
+Z_UI = 12      # все, что на панели
 
 
 class Frame:
@@ -41,16 +41,23 @@ class Frame:
         return self.px(*self.layout.robot_px)
 
 
+_HAVE = None
+
+
 def pick_font(candidates):
-    """Первый шрифт из списка, который есть в системе (Consolas на Windows, DejaVu Sans Mono на Linux)."""
-    import manimpango
-    have = set(manimpango.list_fonts())
-    return next((f for f in candidates if f in have), candidates[-1])
+    """Первый шрифт из списка, который есть в системе (Segoe UI и Consolas — на Windows; на Linux — замена)."""
+    global _HAVE
+    if isinstance(candidates, str):
+        return candidates
+    if _HAVE is None:
+        import manimpango
+        _HAVE = set(manimpango.list_fonts())
+    return next((f for f in candidates if f in _HAVE), candidates[-1])
 
 
 def text(fr, s, px, color, st=Style(), font=None, **kw):
     """Текст шрифтом стиля (или font); знак умножения «·» опущен на середину строчных букв."""
-    font = font or st.font
+    font = pick_font(font or st.font)
     t = Text(s, font=font, font_size=fr.font(px), color=color, **kw)
     glyphs = s.replace(" ", "")
     if "·" in glyphs and len(glyphs) == len(t):
@@ -75,7 +82,7 @@ def _dot_lift(font, size, weight):
 
 
 def baseline(t):
-    """Линия шрифта текста: медиана нижних краёв символов (хвосты «р», «у» и знаки «=», «−» не сбивают)."""
+    """Линия шрифта текста: медиана нижних краев символов (хвосты «р», «у» и знаки «=», «−» не сбивают)."""
     return float(np.median([g.get_bottom()[1] for g in t]))
 
 
