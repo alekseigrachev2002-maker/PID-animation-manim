@@ -50,7 +50,7 @@ class Scene2c(RunSeries):
 `python -m pytest -q` — физика. Кадр сцены — `render(Scene, "1080p", still=True)`; видео в 4K — `render(Scene, "4k")`, все в `videos/`.
 
 ## Картинки для уроков
-`scenes/lessons.py` — кнопка ▶ (или `python scenes/lessons.py`): картинки для репозитория уроков в `renders/lessons/`.
+`scenes/lessons.py` — кнопка ▶ (или `python scenes/lessons.py`): видео 1080p всех шести сцен в `videos/` и картинки для репозитория уроков (они же кадры-превью в презентации) в `renders/lessons/`.
 - PNG 1280×720 — по одной на сцену: `scene-0-motion`, `scene-1-error`, `scene-2a-p`, `scene-2b-turn`, `scene-2c-d`,
   `scene-3-cross`.
   Момент кадра — в списке `KEYS` (секунды видео сцены 1080p); поменять картинку — поменять число. Кадр
