@@ -150,10 +150,10 @@ class RunSeries(PIDScene):
         traj = self.simulate(self.start(0), self.runs[0][0])
         panel = GraphPanel(self.fr, self.st, self.phrase, self.runs[0][1], self.y, self.t_run * 1.12,
                            self.t_ticks, self.signals,
-                           readout=dict(signs=model.wheel_signs(Motor()), law=self.law))
+                           readout=dict(signs=model.wheel_signs(Motor()), law=self.law),
+                           formula=self.formula, formula_colors=self.formula_colors)      # текст — сразу на месте
         self.show(self.track, traj, items=[panel.readout])
         self.add(panel)
-        self.play(panel.set_formula(self.formula, self.formula_colors), run_time=0.8)
         readout = panel.readout
         for i, (ctrl, caption) in enumerate(self.runs):
             if i > 0:

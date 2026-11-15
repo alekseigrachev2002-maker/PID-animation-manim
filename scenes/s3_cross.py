@@ -27,12 +27,12 @@ class Scene3(PIDScene):
     # стоит левее линии, повернут налево: датчики на белом; «рука» сдвигает его вправо — датчики линию не пересекают
     stand = (560.0, 470.0, np.radians(90))
     place = (X_LINE, 500.0, 0.0)            # куда ставят: на линию, вверх; до перекрестка датчикам ~140 мм
-    ctrl = dict(kp=0.12, kd=1.0)            # регулятор из сцены 2
+    ctrl = dict(kp=0.15, kd=1.0)            # регулятор из сцены 2
     delay = 0.020                           # как в сценах 2
     t_stand = 0.6                           # стоит на белом, с
     t_slide = 1.0                           # «рука»: линия подъезжает, с
     t_turn = 1.0                            # «рука»: поворот на месте, с
-    speed = 0.33                            # езда — втрое медленнее, как в сценах 2; «рука» — в реальном времени
+    speed = 0.2                             # езда — впятеро медленнее; «рука» — в реальном времени
 
     def segments(self, track):
         """Отрезки сцены: стоит, линия подъезжает, поворот, езда до перекрестка, торможение."""
@@ -58,11 +58,11 @@ class Scene3(PIDScene):
         a0, a1 = model.channel_sides(sens)
         L, R = Signal(f"L — {a0} датчик, A0", "L", "L"), Signal(f"R — {a1} датчик, A1", "R", "R")
         panel = GraphPanel(self.fr, st, "Перекресток", "датчики на белом", y=("АЦП", 0, 1023),
-                           t_max=traj.t[-1] * 1.08, t_ticks=range(int(traj.t[-1]) + 1), signals=[L, R])
+                           t_max=traj.t[-1] * 1.08, t_ticks=range(int(traj.t[-1]) + 1), signals=[L, R],
+                           formula="L < threshold && R < threshold", formula_colors=[("L", "L"), ("R", "R")])
         trs = Controller().threshold
-        limit = panel.plot.hline(trs, f"threshold = {trs:g}", ValueTracker(1.0))
+        limit = panel.plot.hline(trs, f"threshold = {trs:g}", ValueTracker(1.0), side="left")   # справа — провалы
         self.add(panel, limit, *panel.curves(traj, self.t))
-        self.play(panel.set_formula("L < threshold && R < threshold", [("L", "L"), ("R", "R")]), run_time=0.8)
 
         self.advance(ends[0], speed=1.0)
         self.play(panel.set_caption("ставим на линию"), run_time=0.6)

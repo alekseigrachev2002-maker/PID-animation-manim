@@ -45,16 +45,21 @@ def swap(old, new, shift=0.08):
 # ---------- шапка ----------
 
 class Header(VGroup):
-    """Заголовок этапа (кегль заголовка слайда); под ним — блок с формулой и сразу за ним пояснение шага."""
+    """Заголовок этапа (кегль заголовка слайда); под ним — блок с формулой и сразу за ним пояснение шага.
 
-    def __init__(self, fr, phrase, caption, st=Style()):
+    Весь текст стоит на месте с первого кадра (formula — сразу, без анимации). Смена текста — только swap:
+    старый уходит вверх, новый появляется снизу; ничего не съезжает вбок.
+    """
+
+    def __init__(self, fr, phrase, caption, st=Style(), formula=None, colors=()):
         super().__init__()
         self.fr, self.st = fr, st
-        self.block = None
+        self.block = None if formula is None else self._block(formula, colors)
         self.phrase = self._phrase(phrase)
         self.caption_text = caption
         self.caption = self._caption(caption)
-        self.add(self.phrase, self.caption)
+        self.add(*[m for m in (self.phrase, self.block, self.caption) if m is not None])
+        self._check_fit()
 
     def _phrase(self, s):
         t = text(self.fr, s, self.st.title_px, self.st.text, self.st, weight=self.st.title_weight)
@@ -107,24 +112,28 @@ class Header(VGroup):
         old = getattr(self, attr)
         setattr(self, attr, new)
         if old is None:
-            return FadeIn(new, shift=0.1 * DOWN)
+            return FadeIn(new, shift=0.08 * UP)          # первое появление — как вторая половина swap
         self.remove(old)
         return swap(old, new)
 
-    def set_formula(self, s, colors=()):
-        """Новая формула; пояснение отъезжает, чтобы стоять сразу за блоком."""
-        anim = self._swap("block", self._block(s, colors))
-        dx = self._caption_x() - self.caption.get_left()[0]
+    def set_text(self, formula=None, colors=(), caption=None):
+        """Сменить формулу и/или пояснение одной анимацией. Если формула сменила ширину, пояснение тоже
+        проходит swap (с тем же текстом) — встает за новым блоком, а не съезжает вбок."""
+        anims = []
+        if formula is not None:
+            anims.append(self._swap("block", self._block(formula, colors)))
+        moved = abs(self._caption_x() - self.caption.get_left()[0]) > 1e-6
+        if caption is not None or moved:
+            self.caption_text = self.caption_text if caption is None else caption
+            anims.append(self._swap("caption", self._caption(self.caption_text)))
         self._check_fit()
-        if abs(dx) < 1e-6:
-            return anim
-        return AnimationGroup(anim, self.caption.animate.shift(dx * RIGHT))
+        return AnimationGroup(*anims)
+
+    def set_formula(self, s, colors=()):
+        return self.set_text(formula=s, colors=colors)
 
     def set_caption(self, s):
-        self.caption_text = s
-        anim = self._swap("caption", self._caption(s))
-        self._check_fit()
-        return anim
+        return self.set_text(caption=s)
 
     def set_phrase(self, phrase, caption):
         """Смена этапа: новая фраза и пояснение."""
@@ -205,8 +214,8 @@ class Plot:
             g.add(lab)
         return g.set_z_index(Z_UI)
 
-    def hline(self, value, label, opacity):
-        """Пунктир-ориентир с подписью справа; opacity — ValueTracker."""
+    def hline(self, value, label, opacity, side="right"):
+        """Пунктир-ориентир с подписью над ним у края графика side ("right" или "left"); opacity — ValueTracker."""
         fr, st = self.fr, self.st
         ln = DashedLine(ORIGIN_PT, RIGHT, color=st.muted, stroke_width=fr.stroke(1), dash_length=4 * fr.unit)
         lab = text(fr, label, st.small_px, st.muted, st)
@@ -214,7 +223,10 @@ class Plot:
         def upd(m):
             a, b = self.to_screen([0, self.t_max], [value, value])
             m[0].put_start_and_end_on(a, b)
-            m[1].next_to(a, UP, buff=4 * fr.unit).align_to(a, LEFT).shift(12 * fr.unit * RIGHT)   # слева: справа идут кривые
+            if side == "left":
+                m[1].next_to(a, UP, buff=4 * fr.unit).align_to(a, LEFT).shift(12 * fr.unit * RIGHT)
+            else:
+                m[1].next_to(b, UP, buff=4 * fr.unit).align_to(b, RIGHT)
             m.set_opacity(opacity.get_value())
 
         g = VGroup(ln, lab).add_updater(upd)
@@ -332,11 +344,12 @@ class MotorReadout(VGroup):
 class GraphPanel(VGroup):
     """Шапка + блок формулы + график с сигналами + легенда из сигналов + доп. легенда (ШИМ колес)."""
 
-    def __init__(self, fr, st, phrase, caption, y, t_max, t_ticks, signals, ticks=None, readout=None):
+    def __init__(self, fr, st, phrase, caption, y, t_max, t_ticks, signals, ticks=None, readout=None,
+                 formula=None, formula_colors=()):
         super().__init__()
         self.fr, self.st, self.signals = fr, st, list(signals)
         y_label, lo, hi = y
-        self.header = Header(fr, phrase, caption, st)
+        self.header = Header(fr, phrase, caption, st, formula, self._colors(formula_colors))
         self.plot = Plot(fr, t_max, lo, hi, st)
         ticks = ticks or {v: (lambda lo_, hi_: 1) for v in sorted({lo, 0, hi})}
         self.axes = self.plot.axes(ticks, y_label, t_ticks)
@@ -350,12 +363,18 @@ class GraphPanel(VGroup):
             if row is not None and row.get_right()[0] > limit:
                 warnings.warn(f"{name} не помещается в панель — сократите подписи")
 
+    def _colors(self, colors):
+        return [(part, color_of(self.st, c), *n) for part, c, *n in colors]
+
+    def set_text(self, formula=None, colors=(), caption=None):
+        """Сменить формулу и/или пояснение (swap); colors — какие части формулы каким цветом: [("err", "e")]."""
+        return self.header.set_text(formula, self._colors(colors), caption)
+
     def set_formula(self, s, colors=(("err", "e"),)):
-        """Формула в шапке; colors — какие части каким цветом: [("err", "e"), ("kd·Δerr", "D")]."""
-        return self.header.set_formula(s, [(part, color_of(self.st, c), *n) for part, c, *n in colors])
+        return self.set_text(formula=s, colors=colors)
 
     def set_caption(self, s):
-        return self.header.set_caption(s)
+        return self.set_text(caption=s)
 
     def set_legend(self, items):
         """Сменить легенду (анимация). items: Signal или (Signal, непрозрачность)."""

@@ -28,7 +28,7 @@ MANEUVERS = [
     dict(caption="разгон до 255", code="motors(pwm, pwm)", colors=[("pwm", "L", 0), ("pwm", "R", 1)],
          start=(0.0, -95.0, 0.0), pwm=lambda t: (255 * min(t / T_RAMP, 1.0),) * 2, t_on=T_RAMP + T_HOLD),
     dict(caption="разворот на месте", code="motors(-150, 150)", colors=[("-150", "L"), ("150", "R", 1)],
-         start=(0.0, 0.0, 0.0), pwm=(-150, 150), t_on=0.65),          # с докатыванием — ровно 180°
+         start=(0.0, 0.0, 0.0), pwm=(-150, 150), t_on=None),          # None — подобрать: с докатыванием ровно 180°
     dict(caption="левое колесо быстрее", code="motors(180, 150)", colors=[("180", "L"), ("150", "R")],
          start=(-25.0, -95.0, 0.0), pwm=(180, 150), t_on=0.55),       # уводит вправо на ~37 мм, курс −23°
 ]
@@ -53,29 +53,38 @@ class Scene0(PIDScene):
             warnings.warn(f"робот выходит за {INSIDE:.0%} панели: |x| ≤ {dx:.0f} (можно {half_w:.0f}), "
                           f"|y| ≤ {dy:.0f} (можно {half_h:.0f}) мм")
 
+    def half_turn(self, track, pose, pwm):
+        """Время команды разворота, после которого робот с докатыванием повернется ровно на 180° (по модели)."""
+        lo, hi = 0.05, 5.0
+        for _ in range(30):
+            mid = (lo + hi) / 2
+            psi = model.drive(track, pose, pwm, mid, stop=True, geom=self.geom).psi[-1] - pose[2]
+            lo, hi = (mid, hi) if abs(psi) < np.pi else (lo, mid)
+        return (lo + hi) / 2
+
     def construct(self):
         fr, st = self.fr, self.st
         track = field1()
         starts = [(CENTER[0] + m["start"][0], CENTER[1] + m["start"][1], m["start"][2]) for m in MANEUVERS]
-        trajs = [model.drive(track, p, m["pwm"], m["t_on"], stop=True, geom=self.geom)
-                 for p, m in zip(starts, MANEUVERS)]
+        t_on = [m["t_on"] if m["t_on"] is not None else self.half_turn(track, p, m["pwm"])
+                for p, m in zip(starts, MANEUVERS)]
+        trajs = [model.drive(track, p, m["pwm"], t, stop=True, geom=self.geom)
+                 for p, m, t in zip(starts, MANEUVERS, t_on)]
         for tr in trajs:
             self.check_inside(tr)
         self.show(track, trajs[0], camera="fixed", center=CENTER, anchor_px=PANEL_PX, sensors=False)
 
         t_max = max(tr.t[-1] for tr in trajs) * 1.12
         panel = GraphPanel(fr, st, "Движение робота", MANEUVERS[0]["caption"], y=("ШИМ", -255, 255),
-                           t_max=t_max, t_ticks=[0, 0.5, 1],
-                           # при равных командах правая (оранжевая) лежит поверх левой — в шапке и так motors(pwm, pwm)
-                           signals=[Signal("левый мотор", "pwmL", "L"), Signal("правый мотор", "pwmR", "R")])
+                           t_max=t_max, t_ticks=np.arange(0, t_max, 0.5),
+                           signals=[Signal("левый мотор", "pwmL", "L"), Signal("правый мотор", "pwmR", "R")],
+                           formula=MANEUVERS[0]["code"], formula_colors=MANEUVERS[0]["colors"])   # текст — сразу
         self.add(panel)
-        self.play(panel.set_formula(MANEUVERS[0]["code"], MANEUVERS[0]["colors"]), run_time=0.8)
 
         curves = None
         for i, (m, traj) in enumerate(zip(MANEUVERS, trajs)):
             if i > 0:
-                self.play(FadeOut(curves), panel.set_caption(m["caption"]),
-                          panel.set_formula(m["code"], m["colors"]), run_time=0.8)
+                self.play(FadeOut(curves), panel.set_text(m["code"], m["colors"], m["caption"]), run_time=0.8)
                 self.return_to(starts[i], self.t_slide, self.t_turn)
                 self.switch(traj)
             curves = panel.curves(traj, self.t)

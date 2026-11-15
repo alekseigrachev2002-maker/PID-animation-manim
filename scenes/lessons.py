@@ -53,21 +53,22 @@ class Scene3Key(Scene3):
         a0, a1 = model.channel_sides(sens)
         L, R = Signal(f"L — {a0} датчик, A0", "L", "L"), Signal(f"R — {a1} датчик, A1", "R", "R")
         panel = GraphPanel(self.fr, st, "Перекресток", "оба ниже порога: стоп", y=("АЦП", 0, 1023),
-                           t_max=graph.t[-1] * 1.08, t_ticks=np.arange(0, graph.t[-1], 0.5), signals=[L, R])
+                           t_max=graph.t[-1] * 1.08, t_ticks=np.arange(0, graph.t[-1], 0.5), signals=[L, R],
+                           formula="L < threshold && R < threshold", formula_colors=[("L", "L"), ("R", "R")])
         trs = Controller().threshold
-        limit = panel.plot.hline(trs, f"threshold = {trs:g}", ValueTracker(1.0))
+        limit = panel.plot.hline(trs, f"threshold = {trs:g}", ValueTracker(1.0), side="left")
         self.add(panel, limit, *panel.curves(graph, lambda: max(self.t.get_value() - t0, 0.0)))
-        self.play(panel.set_formula("L < threshold && R < threshold", [("L", "L"), ("R", "R")]), run_time=0.5)
+        self.wait(0.1)
         self.advance(ends[4], speed=1.0)                  # в реальном времени: нужен только последний кадр
 
 
 # картинки: (сцена, момент видео в секундах или None — последний кадр, имя файла)
 KEYS = [
-    (Scene0, 23.5, "scene-0-motion"),       # третий маневр motors(180, 150): робота увело вправо, ШИМ — разница
+    (Scene0, 28.5, "scene-0-motion"),       # третий маневр motors(180, 150): робота увело вправо, ШИМ — разница
     (Scene1, 11.8, "scene-1-error"),        # робот чуть повернут, L и R бледные, err на плато ≈ −700
-    (Scene2a, 17.6, "scene-2a-p"),          # хороший P (kp = 0.15): конец прогона, робот сам вышел на линию и встал
-    (Scene2b, 26.0, "scene-2b-turn"),       # kp = 0.12: съехал с дуги и остановился
-    (Scene2c, 25.0, "scene-2c-d"),          # kd = 1: вышел на прямую; uD — всплеск на входе в дугу и на выходе
+    (Scene2a, 16.8, "scene-2a-p"),          # хороший P (kp = 0.15): конец прогона, робот сам вышел на линию и встал
+    (Scene2b, 28.0, "scene-2b-turn"),       # kp = 0.15: съехал с дуги и остановился
+    (Scene2c, 26.0, "scene-2c-d"),          # kd = 1: вышел на прямую; uD — всплеск на входе в дугу и на выходе
     (Scene3Key, None, "scene-3-cross"),     # стоп на перекрестке: L и R оба ниже порога
 ]
 

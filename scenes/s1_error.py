@@ -47,8 +47,8 @@ class Scene1(PIDScene):
         panel = GraphPanel(self.fr, st, "Считаем ошибку", "сигналы левого и правого датчиков",
                            y=("АЦП", 0, 1023), t_max=4.8, t_ticks=range(5), signals=[L, R], ticks=ticks)
         ref_op = ValueTracker(1.0)
-        refs = [panel.plot.hline(sens.black[0], f"черный ≈ {sens.black[0]}", ref_op),
-                panel.plot.hline(sens.white[0], f"белый ≈ {sens.white[0]}", ref_op)]
+        refs = [panel.plot.hline(sens.black[0], f"черный ≈ {round(sens.black[0], -2):.0f}", ref_op),   # подписи — круглые,
+                panel.plot.hline(sens.white[0], f"белый ≈ {round(sens.white[0], -2):.0f}", ref_op)]    # справа: слева кривые
         dim = ValueTracker(1.0)
         cL, cR = panel.curves(self.traj, self.t, dim)
         self.add(panel, *refs, cL, cR)
@@ -63,7 +63,7 @@ class Scene1(PIDScene):
         self.play(dim.animate.set_value(0.35), prog.animate.set_value(1.0), panel.plot.lo.animate.set_value(-1023),
                   ref_op.animate.set_value(0.0),
                   panel.set_legend([(Signal("L", "L", "L"), 0.35), (Signal("R", "R", "R"), 0.35), ERR]),
-                  panel.set_formula(ERR.label, [("err", "e"), ("L", "L"), ("R", "R")]), panel.set_caption("разность сигналов"), run_time=1.2)
+                  panel.set_text(ERR.label, [("err", "e"), ("L", "L"), ("R", "R")], "разность сигналов"), run_time=1.2)
         self.add(cE)
         self.play(e_end.animate.set_value(self.t.get_value()), run_time=1.5, rate_func=linear)
         e_end.set_value(1e9)
