@@ -23,11 +23,12 @@ from visuals.panel import ERR, GraphPanel  # noqa: E402
 from visuals.robot import Robot  # noqa: E402
 
 
-PLAYBACK = 0.25   # замедление всех сцен: 0.25 — вчетверо медленнее реального времени
+PLAYBACK = 0.25   # замедление езды во всех сценах: 0.25 — вчетверо медленнее реального времени
+HAND = 0.5        # замедление движений «рукой» (перестановка, линия подъезжает, поворот на месте): вдвое
 
 
 class PIDScene(Scene):
-    speed = PLAYBACK   # скорость проигрывания — одна для всех сцен; движения «рукой» — в реальном времени (speed=1.0)
+    speed = PLAYBACK   # скорость проигрывания езды — одна для всех сцен; движения «рукой» — HAND
 
     def setup(self):
         self.fr, self.st, self.geom, self.sensor = Frame(), Style(), Geometry(), Sensor()
@@ -108,12 +109,12 @@ class PIDScene(Scene):
         if np.hypot(tx - x, ty - y) > 0.5:
             self.switch(model.move(self.track, (x, y, psi), (tx, ty, psi), t_slide, roll=False,
                                    geom=self.geom, sensor=self.sensor))
-            self.advance(t_slide, speed=1.0)
+            self.advance(t_slide, speed=HAND)
         dpsi = (tpsi - psi + np.pi) % (2 * np.pi) - np.pi      # кратчайший поворот
         if abs(dpsi) > np.radians(0.5):
             self.switch(model.move(self.track, (tx, ty, psi), (tx, ty, psi + dpsi), t_turn,
                                    geom=self.geom, sensor=self.sensor))
-            self.advance(t_turn, speed=1.0)
+            self.advance(t_turn, speed=HAND)
 
 
 class RunSeries(PIDScene):

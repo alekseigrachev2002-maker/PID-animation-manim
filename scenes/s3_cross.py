@@ -16,7 +16,7 @@ from manim import ValueTracker  # noqa: E402
 
 import model  # noqa: E402
 from params import Controller, Motor  # noqa: E402
-from scenes.base import PIDScene, render  # noqa: E402
+from scenes.base import HAND, PIDScene, render  # noqa: E402
 from track import Track, field1  # noqa: E402
 from visuals.panel import GraphPanel, Signal  # noqa: E402
 
@@ -67,9 +67,9 @@ class Scene3(PIDScene):
         self.add(panel, limit, *panel.curves(traj, self.t))
         self.play(panel.intro(), run_time=0.8)          # заголовок выезжает слева
 
-        self.advance(ends[0], speed=1.0)
+        self.advance(ends[0], speed=HAND)
         self.play(panel.set_caption("ставим на линию"), run_time=0.6)
-        self.advance(ends[2], speed=1.0)
+        self.advance(ends[2], speed=HAND)
         self.play(panel.set_caption("едем по линии"), run_time=0.6)
         self.advance(ends[3])
         # стоп: подпись меняется в начале докатывания (0.6 с на экране) — время не замирает на ходу

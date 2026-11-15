@@ -74,3 +74,14 @@ def test_run_series_scalar_is_p_only():
     s.track = s.make_track()
     run = s.simulate(tuple(float(v) for v in s.start(0)), 0.09)
     assert np.all(run.uD == 0)
+
+
+def test_scene0_robot_inside_80_percent():
+    """Сцена 0 (камера неподвижна): все три маневра — робот целиком в 80 % правой панели."""
+    from scenes.s0_motion import CENTER, MANEUVERS, Scene0
+    s = SimpleNamespace(geom=Geometry(), fr=FR)
+    track = field1()
+    for m in MANEUVERS:
+        pose = (CENTER[0] + m["start"][0], CENTER[1] + m["start"][1], m["start"][2])
+        t_on = m["t_on"] if m["t_on"] is not None else Scene0.half_turn(s, track, pose, m["pwm"])
+        assert Scene0.check_inside(s, model.drive(track, pose, m["pwm"], t_on, stop=True)), m["caption"]

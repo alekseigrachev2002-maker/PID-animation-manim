@@ -28,6 +28,7 @@ def swing(amp_deg, period, cycles, ramp=0.3, dt=0.005):
 
 
 class Scene1(PIDScene):
+    speed = 0.5        # качание «рукой» — вдвое медленнее реального (езды здесь нет, PLAYBACK не нужен)
     amp_deg = 15.0     # амплитуда качания
     period = 2.0       # период качания, с
     ramp = 0.3         # плавный старт и остановка качания, с
@@ -63,9 +64,9 @@ class Scene1(PIDScene):
         self.play(dim.animate.set_value(0.35), prog.animate.set_value(1.0), panel.plot.lo.animate.set_value(-1023),
                   ref_op.animate.set_value(0.0),
                   panel.set_legend([(Signal("L", "L", "L"), 0.35), (Signal("R", "R", "R"), 0.35), ERR]),
-                  panel.set_text(ERR.label, [("err", "e"), ("L", "L"), ("R", "R")], "разность сигналов"), run_time=1.2)
+                  panel.set_text(ERR.label, [("err", "e"), ("L", "L"), ("R", "R")], "разность сигналов"), run_time=2.0)      # смена шкалы и легенды — не спеша
         self.add(cE)
-        self.play(e_end.animate.set_value(self.t.get_value()), run_time=1.5, rate_func=linear)
+        self.play(e_end.animate.set_value(self.t.get_value()), run_time=3.0, rate_func=linear)   # err дорисовывается медленно
         e_end.set_value(1e9)
 
         # 3. еще одно качание

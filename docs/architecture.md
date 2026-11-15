@@ -15,7 +15,7 @@ visuals/field.py   линии трассы и разметка на экране
 visuals/robot.py   робот: place(точка, курс), протектор, метки датчиков; Robot(sensors=False) — без датчиков
 visuals/panel.py   панель графиков: шапка (заголовок, формула, пояснение), график, легенда, строка ШИМ колес
 
-scenes/base.py     PLAYBACK — замедление всех сцен; render() — запуск кнопкой ▶
+scenes/base.py     PLAYBACK — замедление езды, HAND — движений «рукой»; render() — запуск кнопкой ▶
                    PIDScene — стенд: время t, show(трасса, траектория, камера, элементы), advance, switch, return_to
                    RunSeries — серия прогонов: прогон → стоп → возврат → следующий
 scenes/s*.py       сцены 0, 1, 2a, 2b, 2c, 3
