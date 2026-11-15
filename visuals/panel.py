@@ -1,10 +1,13 @@
 """Панель графиков (левые 2/3 кадра): шапка, блок формулы, график, легенда, доп. легенда.
 
-    panel = GraphPanel(fr, st, "Подбираем P", "kp = 0.3, едет по линии",
+    panel = GraphPanel(fr, st, "Подбираем P", "kp = 0.15, едет по линии",
                        y=("err", -1023, 1023), t_max=2.2, t_ticks=[0, 0.5, 1, 1.5, 2],
-                       signals=[ERR], readout=dict(signs=(1, -1)))
-    self.play(panel.set_formula("control = err * kp"))
+                       signals=[ERR], readout=dict(signs=(1, -1)),
+                       formula="control = err * kp", formula_colors=[("err", "e")])   # текст — сразу на месте
+    self.add(panel)
+    self.play(panel.intro(), run_time=0.8)          # заголовок выезжает слева
     curves = panel.curves(traj, self.t)            # кривые всех сигналов, растут за трекером t
+    self.play(panel.set_text(caption="kp = 1, перерегулирование"))   # смена текста — swap
 
 Сигнал — что рисуем на графике: подпись в легенде, поле траектории, цвет.
 Доп. легенда — значения без кривой на графике (ШИМ колес); обновляется каждый кадр через update_state.

@@ -38,6 +38,6 @@ class Scene2c(RunSeries):
 
 
 if __name__ == "__main__":
-    # Кнопка ▶ в PyCharm. Качество: "240p", "480p", "720p", "1080p", "4k"; still=True — только последний кадр.
-    # render(Scene2c, "1080p", still=True)
-    render(Scene2c)
+    # Кнопка ▶ в PyCharm: видео в videos/Scene2c_<качество>.mp4. Качество: "240p", "480p", "720p", "1080p", "4k".
+    render(Scene2c, "480p")
+    # render(Scene2c, "1080p")                  # для презентации; все шесть сразу — scenes/lessons.py

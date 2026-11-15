@@ -31,7 +31,7 @@ from scenes.s3_cross import Scene3  # noqa: E402
 from track import Track, field1  # noqa: E402
 
 OUT = ROOT / "renders" / "lessons"
-QUALITY = "1080p"                     # видео для презентации; из него же — картинки
+QUALITY = "1080p"                     # видео для презентации; из него же — картинки. Черновик: python scenes/lessons.py 480p
 SIZE = (1280, 720)
 LIMIT = 300_000
 
@@ -63,10 +63,10 @@ KEYS = [
 ]
 
 
-def video(scene_cls):
-    """Видео сцены 1080p — из него вырезается кадр (рендер; без изменений Manim берет части из кэша)."""
-    render(scene_cls, QUALITY, preview=False)
-    return ROOT / "videos" / f"{scene_cls.__name__}_{QUALITY}.mp4"
+def video(scene_cls, quality=QUALITY):
+    """Видео сцены — из него вырезается кадр (рендер; без изменений Manim берет части из кэша)."""
+    render(scene_cls, quality, preview=False)
+    return ROOT / "videos" / f"{scene_cls.__name__}_{quality}.mp4"
 
 
 def frame_at(path, t=None):
@@ -87,20 +87,22 @@ def save_png(img, path):
     img.convert("RGB").resize(SIZE, Image.LANCZOS).save(path, optimize=True)
 
 
-def main():
+def main(quality=QUALITY):
+    """Видео всех сцен в качестве quality и картинки из них. Моменты KEYS — те же в любом качестве."""
     OUT.mkdir(parents=True, exist_ok=True)
     files = []
     for scene_cls, t, name in KEYS:
-        path = video(scene_cls)
+        path = video(scene_cls, quality)
         save_png(frame_at(path, t), OUT / f"{name}.png")
         files.append(OUT / f"{name}.png")
         if scene_cls is Scene3Key:
             path.unlink()                                 # служебное видео — только ради картинки
-    video(Scene3)                                         # обычное видео сцены 3 — для презентации
+    video(Scene3, quality)                                # обычное видео сцены 3 — для презентации
     for f in files:
         size = f.stat().st_size
         print(f"{f.name:22} {size / 1e3:8.0f} КБ" + ("  ← больше цели" if size > LIMIT else ""))
 
 
 if __name__ == "__main__":
-    main()
+    # Кнопка ▶ или python scenes/lessons.py — 1080p для презентации; python scenes/lessons.py 480p — быстрый черновик
+    main(sys.argv[1] if len(sys.argv) > 1 else QUALITY)

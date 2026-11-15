@@ -79,6 +79,6 @@ class Scene3(PIDScene):
 
 
 if __name__ == "__main__":
-    # Кнопка ▶ в PyCharm. Качество: "240p", "480p", "720p", "1080p", "4k"; still=True — только последний кадр.
-    render(Scene3, "240p")
-    # render(Scene3, "1080p")
+    # Кнопка ▶ в PyCharm: видео в videos/Scene3_<качество>.mp4. Качество: "240p", "480p", "720p", "1080p", "4k".
+    render(Scene3, "480p")
+    # render(Scene3, "1080p")                  # для презентации; все шесть сразу — scenes/lessons.py

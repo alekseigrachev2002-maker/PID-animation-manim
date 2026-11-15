@@ -368,6 +368,8 @@ def _pack(cont, ticks, lost_at):
 
 # ---------- кэш ----------
 
+_SOURCE = hashlib.sha1(Path(__file__).read_bytes()).hexdigest()     # версия физики — часть ключа кэша
+
 def _fingerprint(obj):
     if hasattr(obj, "lines"):
         return [ln.points.tobytes() for ln in obj.lines]
@@ -375,11 +377,12 @@ def _fingerprint(obj):
 
 
 def cached_simulate(track, pose0, **kw):
-    """simulate() с кэшем в .cache/<хэш параметров>.npz. Ключ — все параметры, включая значения по умолчанию."""
+    """simulate() с кэшем в .cache/<хэш>.npz. Ключ — все параметры (включая значения по умолчанию) и текст
+    model.py: поменяли физику — старые траектории в кэше не подхватятся."""
     args = inspect.signature(simulate).bind(track, pose0, **kw)
     args.apply_defaults()
     rest = {k: v for k, v in args.arguments.items() if k not in ("track", "pose0")}
-    key = repr([_fingerprint(track), tuple(pose0), sorted((k, repr(v)) for k, v in rest.items())])
+    key = repr([_SOURCE, _fingerprint(track), tuple(pose0), sorted((k, repr(v)) for k, v in rest.items())])
     path = CACHE / (hashlib.sha1(key.encode()).hexdigest()[:16] + ".npz")
     if path.exists():
         return Trajectory.load(path)
