@@ -196,9 +196,12 @@ class Plot:
         g.add(text(fr, y_label, small, st.muted, st).move_to(fr.px(x0 + 8, y0 - 16), aligned_edge=LEFT))
         for val, op in ticks.items():
             lab = text(fr, f"{val:g}".replace("-", "−"), small, st.muted, st)
-            lab.add_updater(lambda m, val=val, op=op: m.move_to(
-                self.to_screen([0], [val])[0] + LEFT * 10 * fr.unit, aligned_edge=RIGHT).set_opacity(
-                op(self.lo.get_value(), self.hi.get_value())))
+            def place(m, val=val, op=op):
+                m.move_to(self.to_screen([0], [val])[0] + LEFT * 10 * fr.unit, aligned_edge=RIGHT)
+                m.set_opacity(op(self.lo.get_value(), self.hi.get_value()))
+
+            lab.add_updater(place)
+            place(lab)      # сразу на место: неподвижный wait() апдейтеры не вызывает — иначе первый кадр с подписями в центре
             g.add(lab)
         return g.set_z_index(Z_UI)
 
