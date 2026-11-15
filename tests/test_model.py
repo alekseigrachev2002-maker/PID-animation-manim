@@ -184,7 +184,7 @@ def test_path_left_turn_radius():
 def test_start_from_rest_accelerates():
     traj = model.simulate(LINE, (0.0, 0.0, 0.0), t_end=0.5)
     v = (traj.vL + traj.vR) / 2
-    assert v[0] == 0 and v[-1] == pytest.approx(Motor().v_at_150, rel=0.02)
+    assert v[0] == 0 and v[-1] == pytest.approx(Motor().speed(150), rel=0.02)
     assert np.all(np.diff(v) >= -1e-9)                       # разгон без скачков
 
 
@@ -211,10 +211,29 @@ def test_drive_spin_in_place_keeps_axle():
 def test_drive_arc_radius():
     m = Motor()
     tr = model.drive(LINE, (0.0, 0.0, 0.0), (200, 100), 3.0)
-    vl, vr = m.k * (200 - m.pwm_stop), m.k * (100 - m.pwm_stop)
+    vl, vr = model.turn_targets((m.speed(200), m.speed(100)), m)    # разница скоростей — с потерей в повороте
     R = Geometry().track_width / 2 * (vl + vr) / (vl - vr)            # радиус дуги середины оси
     v, w = tr.speed_at(2.5)
     assert v / abs(w) == pytest.approx(R, rel=0.01)
+
+
+def test_speed_curve_measured_points():
+    m = Motor()
+    assert m.speed(150) == pytest.approx(280) and m.speed(255) == pytest.approx(435)   # замер на полу
+    assert m.speed(-150) == pytest.approx(-280) and m.speed(40) == 0
+
+
+def test_turn_share_keeps_mean_speed():
+    m = Motor(turn_share=0.35)
+    vl, vr = model.turn_targets((400.0, 200.0), m)
+    assert (vl + vr) / 2 == pytest.approx(300) and vl - vr == pytest.approx(0.35 * 200)
+
+
+def test_coast_matches_measurement():
+    """Выбег после motors(0, 0) с 280 мм/с — около 30 мм (замер на полу)."""
+    run = model.simulate(LINE, (0.0, 0.0, 0.0), t_end=1.0)
+    stop = model.brake(LINE, run)
+    assert stop.y[-1] - run.y[-1] == pytest.approx(30, abs=6)
 
 
 def test_brake_until_still_with_slow_motor():
@@ -252,7 +271,7 @@ def test_stop_below_ends_on_crossing():
     assert run.t[-1] < 2.9
     assert np.all((run.L >= 300) | (run.R >= 300))
     L, R = model.read_sensors(CROSS, (run.x[-1], run.y[-1], run.psi[-1]), G, S)
-    assert max(L, R) < 300
+    assert max(L, R) < 320                                  # поза — за 1 мс (GRID) до тика стопа
     assert abs(run.y[-1] + G.sensor_y - 300) < 15           # датчики на полосе перекрёстка
 
 

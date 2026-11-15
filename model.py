@@ -115,9 +115,13 @@ def update_moving(moving, v, pwm, motor: Motor):
 
 def wheel_target(pwm, moving, motor: Motor):
     """Установившаяся скорость колеса, мм/с."""
-    if not moving:
-        return 0.0
-    return np.sign(pwm) * motor.k * max(0.0, abs(pwm) - motor.pwm_stop)
+    return motor.speed(pwm) if moving else 0.0
+
+
+def turn_targets(vt, motor: Motor):
+    """Скорости, к которым тянутся колёса: от разницы целевых до поворота доходит доля Motor.turn_share."""
+    mid, half = (vt[0] + vt[1]) / 2, (vt[0] - vt[1]) / 2 * motor.turn_share
+    return mid + half, mid - half
 
 
 def delayed(lag, cmd):
@@ -196,7 +200,8 @@ def _wheel_step(s, moving, cmd, t0, dt, motor: Motor, geom: Geometry):
     s = s.copy()
     s[3] = s[3] if moving[0] else 0.0
     s[4] = s[4] if moving[1] else 0.0
-    vt = (wheel_target(cmd[0], moving[0], motor), wheel_target(cmd[1], moving[1], motor))
+    vt = turn_targets((wheel_target(cmd[0], moving[0], motor), wheel_target(cmd[1], moving[1], motor)), motor)
+    vt = tuple(v if mv else 0.0 for v, mv in zip(vt, moving))      # стоящее колесо стоит
     sol = solve_ivp(rhs, (t0, t0 + dt), s, args=(*vt, motor.tau, geom.track_width),
                     dense_output=True, rtol=1e-8, atol=1e-8)
     tg = t0 + GRID * np.arange(int(round(dt / GRID)))
