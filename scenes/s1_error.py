@@ -53,10 +53,12 @@ class Scene1(PIDScene):
         cL, cR = panel.curves(self.traj, self.t, dim)
         self.add(panel, *refs, cL, cR)
         self.play(panel.intro(), run_time=0.8)          # заголовок выезжает слева
-        self.wait(0.5)
 
-        # 1. одно качание: L и R
+        # промежуток 1: одно качание — L и R
         self.advance(self.period + self.ramp / 2)      # конец первого качания
+        self.end_block()
+
+        # промежуток 2: разность err и еще одно качание
 
         # 2. L, R бледнеют, шкала ±1023, появляется err
         e_end = ValueTracker(0.0)
@@ -73,7 +75,7 @@ class Scene1(PIDScene):
         full = round(abs(sens.white[0] - sens.black[0]), -2)        # |err|, когда датчик целиком на линии
         self.play(panel.set_caption(f"err ≈ ±{full:.0f}, датчик целиком на линии"), run_time=0.8)
         self.advance(self.traj.t[-1])
-        self.wait(1.5)
+        self.end_block()
 
 
 if __name__ == "__main__":

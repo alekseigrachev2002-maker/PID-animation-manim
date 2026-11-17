@@ -1,8 +1,8 @@
 """Сцена 0. Движение робота: команды моторам → как едет робот. Без датчиков и без линии.
 
 Три маневра, каждый с места и до остановки (после команды — motors(0, 0) и докатывание по физике):
-разгон с линейным ростом ШИМ до 255 и удержанием, разворот на месте ровно на 180°, левое колесо быстрее —
-робота уводит вправо по короткой дуге. Маневры примерно одной длины (~1,3 с). Камера неподвижна и смотрит на
+разгон с линейным ростом ШИМ до 255 и удержанием, оборот на месте ровно на 360°, левое колесо быстрее —
+робота уводит вправо по короткой дуге. Каждый маневр — один промежуток BLOCK. Камера неподвижна и смотрит на
 фрагмент поля 2400×1500 (вертикаль «0–5» между желтым квадратом и центральным перекрестком): линия — эталон
 «прямо», датчиков у робота нет. Между маневрами робота переставляют «рукой» (HAND). Езда — PLAYBACK.
 На графике — только то, что пишется в коде: ШИМ левого и правого мотора.
@@ -21,17 +21,17 @@ from scenes.base import PIDScene, render  # noqa: E402
 from track import field1  # noqa: E402
 from visuals.panel import GraphPanel, Signal  # noqa: E402
 
-T_RAMP = 0.35  # разгон: ШИМ линейно 0 → 255 за T_RAMP, с
-T_HOLD = 0.28  # затем держим 255 — дольше не дает рамка 80 % правой панели (камера неподвижна)
+T_RAMP = 0.95  # разгон: ШИМ линейно 0 → 255 за T_RAMP, с (медленный рост — видно, как растет скорость)
+T_HOLD = 0.0   # удержания 255 нет: дальше не пускает рамка 80 % правой панели (камера неподвижна)
 
 # пояснение в шапке, вызов в блоке формулы и цвета его частей, старт (x, y, ψ) в мм от CENTER, ШИМ, время команды
 MANEUVERS = [
     dict(caption="разгон до 255", code="motors(pwm, pwm)", colors=[("pwm", "L", 0), ("pwm", "R", 1)],
-         start=(0.0, -98.0, 0.0), pwm=lambda t: (255 * min(t / T_RAMP, 1.0),) * 2, t_on=T_RAMP + T_HOLD),
-    dict(caption="разворот на месте", code="motors(-255, 255)", colors=[("-255", "L"), ("255", "R", 1)],
-         start=(0.0, 0.0, 0.0), pwm=(-255, 255), t_on=None),          # None — подобрать: с докатыванием ровно 180°
-    dict(caption="левое колесо быстрее", code="motors(150, 90)", colors=[("150", "L"), ("90", "R")],
-         start=(-23.0, -74.0, 0.0), pwm=(150, 90), t_on=0.8),         # дуга вправо: ~150 мм вперед, ~45 вбок, −34°
+         start=(0.0, -100.0, 0.0), pwm=lambda t: (255 * min(t / T_RAMP, 1.0),) * 2, t_on=T_RAMP + T_HOLD),
+    dict(caption="оборот на месте", code="motors(-200, 200)", colors=[("-200", "L"), ("200", "R", 1)],
+         start=(0.0, 0.0, 0.0), pwm=(-200, 200), t_on=None, turn=360),  # None — подобрать: с докатыванием ровно turn°
+    dict(caption="левое колесо быстрее", code="motors(100, 75)", colors=[("100", "L"), ("75", "R")],
+         start=(-26.0, -80.0, 0.0), pwm=(100, 75), t_on=1.6),         # медленная дуга вправо: ~160 мм вперед, курс −36°
 ]
 
 CENTER = (601.7, 600.0)       # точка поля 1 в центре правой панели: вертикаль x = 601.7, между квадратом и перекрестком
@@ -54,20 +54,20 @@ class Scene0(PIDScene):
                           f"|y| ≤ {dy:.0f} (можно {half_h:.0f}) мм")
         return dx <= half_w + 0.5 and dy <= half_h + 0.5
 
-    def half_turn(self, track, pose, pwm):
-        """Время команды разворота, после которого робот с докатыванием повернется ровно на 180° (по модели)."""
-        lo, hi = 0.05, 5.0
+    def turn_time(self, track, pose, pwm, turn_deg=180.0):
+        """Время команды поворота на месте, после которого робот с докатыванием повернется ровно на turn_deg."""
+        lo, hi = 0.05, 8.0
         for _ in range(30):
             mid = (lo + hi) / 2
             psi = model.drive(track, pose, pwm, mid, stop=True, geom=self.geom).psi[-1] - pose[2]
-            lo, hi = (mid, hi) if abs(psi) < np.pi else (lo, mid)
+            lo, hi = (mid, hi) if abs(psi) < np.radians(turn_deg) else (lo, mid)
         return (lo + hi) / 2
 
     def construct(self):
         fr, st = self.fr, self.st
         track = field1()
         starts = [(CENTER[0] + m["start"][0], CENTER[1] + m["start"][1], m["start"][2]) for m in MANEUVERS]
-        t_on = [m["t_on"] if m["t_on"] is not None else self.half_turn(track, p, m["pwm"])
+        t_on = [m["t_on"] if m["t_on"] is not None else self.turn_time(track, p, m["pwm"], m.get("turn", 180))
                 for p, m in zip(starts, MANEUVERS)]
         trajs = [model.drive(track, p, m["pwm"], t, stop=True, geom=self.geom)
                  for p, m, t in zip(starts, MANEUVERS, t_on)]
@@ -84,17 +84,15 @@ class Scene0(PIDScene):
         self.play(panel.intro(), run_time=0.8)          # заголовок выезжает слева
 
         curves = None
-        for i, (m, traj) in enumerate(zip(MANEUVERS, trajs)):
+        for i, (m, traj) in enumerate(zip(MANEUVERS, trajs)):     # каждый маневр — один промежуток BLOCK
             if i > 0:
                 self.play(FadeOut(curves), panel.set_text(m["code"], m["colors"], m["caption"]), run_time=0.8)
                 self.return_to(starts[i], self.t_slide, self.t_turn)
                 self.switch(traj)
             curves = panel.curves(traj, self.t)
             self.add(curves)
-            self.wait(0.3)
             self.advance(traj.t[-1])
-            self.wait(0.8)
-        self.wait(1.0)
+            self.end_block()
 
 
 if __name__ == "__main__":

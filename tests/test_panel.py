@@ -59,12 +59,13 @@ def test_set_text_swaps_caption_to_new_place():
     assert h.caption_text == "пояснение"
 
 
-def test_scene0_half_turn_is_180():
+def test_scene0_turn_time_exact_angle():
     from scenes.s0_motion import Scene0
     track, pose = field1(), (600.0, 600.0, 0.0)
-    t_on = Scene0.half_turn(SimpleNamespace(geom=Geometry()), track, pose, (-150, 150))
-    psi = model.drive(track, pose, (-150, 150), t_on, stop=True).psi[-1]
-    assert np.degrees(abs(psi)) == pytest.approx(180, abs=1.0)
+    for deg in (180, 360):
+        t_on = Scene0.turn_time(SimpleNamespace(geom=Geometry()), track, pose, (-200, 200), deg)
+        psi = model.drive(track, pose, (-200, 200), t_on, stop=True).psi[-1]
+        assert np.degrees(abs(psi)) == pytest.approx(deg, abs=2.5)     # команда кратна такту: ±2,3° за такт при ±200
 
 
 def test_run_series_scalar_is_p_only():
@@ -83,5 +84,5 @@ def test_scene0_robot_inside_80_percent():
     track = field1()
     for m in MANEUVERS:
         pose = (CENTER[0] + m["start"][0], CENTER[1] + m["start"][1], m["start"][2])
-        t_on = m["t_on"] if m["t_on"] is not None else Scene0.half_turn(s, track, pose, m["pwm"])
+        t_on = m["t_on"] if m["t_on"] is not None else Scene0.turn_time(s, track, pose, m["pwm"], m.get("turn", 180))
         assert Scene0.check_inside(s, model.drive(track, pose, m["pwm"], t_on, stop=True)), m["caption"]

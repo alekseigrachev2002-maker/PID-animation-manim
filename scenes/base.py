@@ -24,11 +24,22 @@ from visuals.robot import Robot  # noqa: E402
 
 GENERAL = 0.75  # общий коэффициент замедления (доля реального времени): крутить его, чтобы ускорить или замедлить все
 PLAYBACK = 0.4 * GENERAL  # езда во всех сценах (сейчас 0.3 — в 3,3 раза медленнее реального времени)
+BLOCK = 11.0  # длина одного промежутка сцены, с: сцена — целое число промежутков (0 — 3, 1 — 2, 2a — 3, 2b/2c — 2, 3 — 1)
 HAND = 0.85 * GENERAL  # движения «рукой»: перестановка, линия подъезжает, поворот на месте, качание в сцене 1
 
 
 class PIDScene(Scene):
     speed = PLAYBACK  # скорость проигрывания езды — одна для всех сцен; движения «рукой» — HAND
+
+    def end_block(self):
+        """Конец промежутка: дождаться, пока время сцены дойдет до границы следующего BLOCK (робот стоит, все видно).
+        Если промежуток длиннее BLOCK — предупреждение при рендере."""
+        self._blocks = getattr(self, "_blocks", 0) + 1
+        rest = self._blocks * BLOCK - self.time
+        if rest < -1e-3:
+            warnings.warn(f"{type(self).__name__}: промежуток {self._blocks} длиннее BLOCK = {BLOCK} с на {-rest:.1f} с")
+        elif rest > 1e-3:
+            self.wait(rest)
 
     def setup(self):
         self.fr, self.st, self.geom, self.sensor = Frame(), Style(), Geometry(), Sensor()
@@ -168,8 +179,10 @@ class RunSeries(PIDScene):
         self.add(panel)
         self.play(panel.intro(), run_time=0.8)  # заголовок выезжает слева
         readout = panel.readout
-        for i, (ctrl, caption) in enumerate(self.runs):
+        curves = None
+        for i, (ctrl, caption) in enumerate(self.runs):          # каждый прогон — один промежуток BLOCK
             if i > 0:
+                self.play(FadeOut(curves), panel.set_caption(caption), run_time=0.8)   # кривые гаснут, новый прогон
                 target = self.start(i)
                 self.return_to(target, self.t_slide, self.t_turn, self.return_together)
                 self.switch(self.simulate(target, ctrl))
@@ -177,18 +190,13 @@ class RunSeries(PIDScene):
             clock = RunClock(self.t)  # кривые растут за t во время прогона и замирают на его конце
             curves = panel.curves(self.traj, clock)
             self.add(curves)
-            self.wait(0.3)
             self.advance(self.traj.t[-1])
             clock.stop()
             # стоп: motors(0, 0), робот докатывается по той же физике; строка ШИМ приглушается — регулятор выключен
             self.switch(model.brake(self.track, self.traj, geom=self.geom, sensor=self.sensor,
                                     motor=Motor()))
             self.advance(self.traj.t[-1], readout.opacity.animate.set_value(0.35))
-            self.wait(0.5)
-            if i < len(self.runs) - 1:
-                # кривые гаснут, в шапке — следующий прогон
-                self.play(FadeOut(curves), panel.set_caption(self.runs[i + 1][1]), run_time=0.8)
-        self.wait(1.0)
+            self.end_block()
 
 
 class RunClock:
