@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import numpy as np  # noqa: E402
-from manim import FadeOut, Scene, ValueTracker, linear, tempconfig  # noqa: E402
+from manim import FadeOut, Scene, ValueTracker, config, linear, tempconfig  # noqa: E402
 
 import model  # noqa: E402
 from params import Controller, Geometry, Motor, Sensor, Style  # noqa: E402
@@ -31,15 +31,22 @@ HAND = 0.85 * GENERAL  # движения «рукой»: перестановк
 class PIDScene(Scene):
     speed = PLAYBACK  # скорость проигрывания езды — одна для всех сцен; движения «рукой» — HAND
 
+    def play(self, *args, **kwargs):
+        """Как Scene.play, плюс счет кадров видео (frames) — по тому же правилу, что у Manim: шагов 1/fps в run_time.
+        Ждем всегда «на ходу» (frozen_frame=False), иначе Manim округляет паузу вниз и теряет кадр."""
+        super().play(*args, **kwargs)
+        self.frames = getattr(self, "frames", 0) + len(np.arange(0, self.duration, 1 / config.frame_rate))
+
     def end_block(self):
-        """Конец промежутка: дождаться, пока время сцены дойдет до границы следующего BLOCK (робот стоит, все видно).
-        Если промежуток длиннее BLOCK — предупреждение при рендере."""
+        """Конец промежутка: пауза до границы следующего BLOCK — ровно в кадрах (робот стоит, все видно).
+        Длительность сцены — точно N·BLOCK в любом качестве. Если промежуток длиннее BLOCK — предупреждение."""
         self._blocks = getattr(self, "_blocks", 0) + 1
-        rest = self._blocks * BLOCK - self.time
-        if rest < -1e-3:
-            warnings.warn(f"{type(self).__name__}: промежуток {self._blocks} длиннее BLOCK = {BLOCK} с на {-rest:.1f} с")
-        elif rest > 1e-3:
-            self.wait(rest)
+        need = round(self._blocks * BLOCK * config.frame_rate) - getattr(self, "frames", 0)
+        if need < 0:
+            warnings.warn(f"{type(self).__name__}: промежуток {self._blocks} длиннее BLOCK = {BLOCK} с "
+                          f"на {-need / config.frame_rate:.1f} с")
+        elif need > 0:
+            self.wait((need - 0.5) / config.frame_rate, frozen_frame=False)   # ровно need кадров
 
     def setup(self):
         self.fr, self.st, self.geom, self.sensor = Frame(), Style(), Geometry(), Sensor()

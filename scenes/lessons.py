@@ -48,7 +48,7 @@ class Scene3Key(Scene3):
         graph, t0 = model.chain(segs[3], segs[4]), ends[2]
         panel, limit = self.panel("оба ниже порога: стоп", graph.t[-1], np.arange(0, graph.t[-1], 0.5))
         self.add(panel, limit, *panel.curves(graph, lambda: max(self.t.get_value() - t0, 0.0)))
-        self.wait(0.1)
+        self.wait(0.1, frozen_frame=False)
         self.advance(ends[4], speed=1.0)                  # в реальном времени: нужен только последний кадр
 
 
