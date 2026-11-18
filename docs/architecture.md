@@ -72,7 +72,7 @@ class Scene2c(RunSeries):
 
 `scenes/lessons.py` — кнопка ▶ или `python scenes/lessons.py`: видео 1080p всех шести сцен в `videos/` и картинки
 в `renders/lessons/`. Черновик быстрее: `python scenes/lessons.py 480p`.
-- Картинки PNG 1280×720, по одной на сцену: `scene-0-motion`, `scene-1-error`, `scene-2a-p`, `scene-2b-turn`,
+- Картинки PNG 1920×1080 (как видео), по одной на сцену: `scene-0-motion`, `scene-1-error`, `scene-2a-p`, `scene-2b-turn`,
   `scene-2c-d`, `scene-3-cross`. Они же — кадры-превью видео в презентации (Видео → Кадр-постер → Изображение
   из файла).
 - Момент кадра — в списке `KEYS`, через промежутки: «конец промежутка k минус 0.5 с» (одинаков в любом качестве
