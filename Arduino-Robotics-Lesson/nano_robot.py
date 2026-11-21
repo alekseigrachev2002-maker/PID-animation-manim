@@ -80,7 +80,7 @@ def sonar_parts(s: Sonar, edge_w):
                      fill_opacity=1, stroke_width=0)
         cans.add(VGroup(body, face))
     plate = _rect(s.plate_w, s.plate_t, 0, y0 + s.plate_t / 2, 0.8, **white)
-    return VGroup(tab, pcb, ears, cans, plate)          # винты белые, как крепление, — не рисуем    # пластина поверх излучателей: они выходят через окна
+    return VGroup(tab, pcb, ears, cans, plate)    # пластина поверх излучателей (они выходят через окна); винты не рисуем
 
 
 class SonarRobot(Robot):

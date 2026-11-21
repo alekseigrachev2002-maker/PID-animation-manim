@@ -6,7 +6,7 @@
 эталон «прямо». Маневр — 8 с движения (MOTION): разгон — подобрано время роста ШИМ, дуга — время команды;
 оборот — ровно 360°, сколько займет. Смена подписи — сверх 8 с.
 """
-from nano_base import MOTION, NanoScene, RunClock, render  # первым: добавляет в путь корень репозитория
+from nano_base import MOTION, NanoScene, RunClock, bisect, render  # первым: добавляет в путь корень репозитория
 
 import numpy as np
 from manim import FadeOut
@@ -39,16 +39,13 @@ class Nano1a(NanoScene):
     def fit(self, track, pose, m):
         """Маневр на MOTION секунд видео (оборот — на заданный угол): подбор времени делением пополам."""
         target = MOTION * self.speed
-        lo, hi = 0.05, 6.0
-        for _ in range(30):
-            mid = (lo + hi) / 2
-            tr = self.drive(track, pose, m, mid)
+
+        def done(t):
+            tr = self.drive(track, pose, m, t)
             if m["fit"] == "turn":
-                done = abs(tr.psi[-1] - pose[2]) >= np.radians(m["turn"])
-            else:
-                done = tr.t[-1] >= target
-            lo, hi = (lo, mid) if done else (mid, hi)
-        return self.drive(track, pose, m, (lo + hi) / 2)
+                return abs(tr.psi[-1] - pose[2]) >= np.radians(m["turn"])
+            return tr.t[-1] >= target
+        return self.drive(track, pose, m, bisect(done, 0.05, 6.0))
 
     def construct(self):
         fr, st = self.fr, self.st

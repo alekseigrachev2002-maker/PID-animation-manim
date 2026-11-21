@@ -28,19 +28,28 @@ _SOURCE = hashlib.sha1(Path(__file__).read_bytes() + Path(model.__file__).read_b
 
 
 def simulate(track, pose0, ctrl=Controller(), ki=0.0, t_end=5.0, geom=Geometry(), sensor=SENSOR, motor=Motor(),
-             lost_dist=100.0, stop_below=None):
+             lost_dist=100.0, stop_below=None, stop_at=1):
     """Как model.simulate, плюс И: integral = integral + err, control = uP + uD + integral·ki.
-    lost_dist = np.inf — робот, потерявший линию, едет дальше (сцена подбора P)."""
+    lost_dist = np.inf — робот, потерявший линию, едет дальше (сцена подбора P).
+    stop_below — порог перекрестка: оба датчика ниже — перекресток (счет по фронту, как в уроке 3); на stop_at-м
+    перекрестке регулятор не вызывается и траектория кончается (дальше brake), прошлые робот проезжает.
+    Перекресток, на котором робот стоит на старте (оба датчика ниже порога на первом тике), не считается."""
     s = np.array([*pose0, 0.0, 0.0, 0.0, 0.0])
     moving = [False, False]
     cont, ticks, extra = [], [], []
     e_old, integral, lost_at = None, 0.0, np.nan
+    count, was = 0, None
     lag = deque([(0.0, 0.0)] * int(round(motor.delay / ctrl.period)))
     for k in range(int(round(t_end / ctrl.period))):
         t0 = k * ctrl.period
         L, R = model.to_channels(model.read_sensors(track, s[:3], geom, sensor), sensor)
-        if stop_below is not None and L < stop_below and R < stop_below:
-            break
+        if stop_below is not None:
+            cross = L < stop_below and R < stop_below
+            was = cross if was is None else was          # стоим на перекрестке на старте — он не в счет
+            count += cross and not was
+            was = cross
+            if cross and count >= stop_at:
+                break
         e = model.error(L, R, ctrl)
         e_old = e if e_old is None else e_old
         integral = integral + e

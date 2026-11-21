@@ -6,9 +6,9 @@ kp 0,2 и 0,3 модель почти не различает: линия 20 м�
 поворачивает толчками при любом kp от 0,1 (err скачет 0 ↔ +600).
 """
 from nano_base import NanoRunSeries, render
-from nano_track import ShortTrack
+from nano_track import S_LOOP_RIGHT, ShortTrack
 
-START = 3147.0        # путь по маршруту (по часовой), мм: верхняя внутренняя прямая, 250 мм до поворота R 240
+START = S_LOOP_RIGHT - 250.0   # верхняя внутренняя прямая, 250 мм до поворота R 240
 
 
 class Nano2b(NanoRunSeries):

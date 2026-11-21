@@ -16,7 +16,7 @@ from n2b_p import Nano2b
 from n2c_d import Nano2c
 from n3a_i_offset import Nano3a
 from n3b_cross import Nano3b
-from n4a_turn import Nano4a
+from n4a_turn import FILES, SCENES
 from scenes.lessons import END, LIMIT, frame_at, save_png
 
 OUT = ROOT / "out" / "arduino"
@@ -30,7 +30,10 @@ KEYS = [
     (Nano2c, 2, -END, "scene-2c-d"),            # kd = 1: вписался
     (Nano3a, 2, -END, "scene-3a-i-offset"),     # с И: uI взял поворот на себя
     (Nano3b, 1, -END, "scene-3b-cross"),        # перекресток X позади
-    (Nano4a, 3, -END, "scene-4a-turn"),         # кубик справа — уехал налево
+] + [
+    # 4a: каждая версия в двух видах; с графиком — конец (стоп на финише), без графика — решение на X
+    (cls, 2 if full else 3, -END, FILES[name] + ("-full" if full else ""))
+    for (name, full), cls in SCENES.items()
 ]
 
 

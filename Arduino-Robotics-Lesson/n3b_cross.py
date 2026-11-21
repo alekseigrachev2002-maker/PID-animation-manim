@@ -4,7 +4,7 @@
 пересекаются две кривые линии — и проезжает его. График — L и R с порогом 300: на перекрестке оба ниже порога.
 Камера повернута: на старте робот едет вверх.
 """
-from nano_base import MOTION, NanoScene, RunClock, render  # первым: добавляет в путь корень репозитория
+from nano_base import MOTION, NanoScene, RunClock, fit_run, render  # первым: добавляет в путь корень репозитория
 
 import numpy as np
 from manim import ValueTracker
@@ -12,27 +12,20 @@ from manim import ValueTracker
 import model
 import nano_model
 from n3a_i_offset import PD
-from nano_track import ShortTrack
+from nano_track import S_X_IN, ShortTrack
 from params import Controller, Motor
 from visuals.panel import GraphPanel, Signal
 
-START = 250.0           # путь по маршруту (по часовой), мм: дуга R 700, до перекрестка X ~370 мм
+START = S_X_IN - 367.0  # дуга R 700, до перекрестка X 367 мм
 INTRO = 0.8
 
 
 class Nano3b(NanoScene):
     def runs(self, track):
         """Прогон и докатывание — MOTION = 8 с видео."""
-        target = MOTION * self.speed
-        t_end = target - 0.25
-        for _ in range(6):
-            run = nano_model.cached_simulate(track, track.pose_at(START), ctrl=Controller(**PD), t_end=round(t_end, 3))
-            stop = model.brake(track, run, geom=self.geom, sensor=self.sensor, motor=Motor())
-            over = run.t[-1] + stop.t[-1] - target
-            if abs(over) <= 0.01:
-                break
-            t_end -= over + 0.005
-        return run, stop
+        return fit_run(lambda t: nano_model.cached_simulate(track, track.pose_at(START), ctrl=Controller(**PD), t_end=t),
+                       lambda run: model.brake(track, run, geom=self.geom, sensor=self.sensor, motor=Motor()),
+                       MOTION * self.speed)
 
     def construct(self):
         track = ShortTrack()

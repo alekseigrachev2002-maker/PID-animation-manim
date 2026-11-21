@@ -6,8 +6,10 @@
 - на поле — черные круги трека (Decor);
 - подсцена — MOTION = 8 с движения (прогон с докатыванием, маневр); заголовок, смена подписи и перестановка
   «рукой» идут сверх этих 8 с и в счет не входят; конец каждой подсцены записывается в SEGMENTS (для картинок);
-- прогоны регулятора — nano_model (с И); длина прогона подбирается под 8 с; потерявший линию робот едет дальше;
-- «рука» везде с одной скоростью: время перестановки — от расстояния и угла (HAND_V, HAND_W).
+- прогоны регулятора — nano_model (с И); длина прогона подбирается под 8 с (fit_run); потерявший линию робот
+  едет дальше;
+- «рука» везде с одной скоростью: время перестановки — от расстояния и угла (HAND_V, HAND_W);
+- простая езда по линии может быть ускорена (FAST, advance_fast) с плавным переходом и пометкой кратности.
 Замедление (PLAYBACK — езда, HAND — «рука») и панель графиков — общие с олимпиадными сценами.
 """
 import sys
@@ -21,7 +23,7 @@ for p in (str(ROOT), str(HERE)):
         sys.path.insert(0, p)
 
 import numpy as np  # noqa: E402
-from manim import Circle, FadeOut, VGroup, config  # noqa: E402
+from manim import LEFT, Circle, FadeOut, VGroup, VMobject, config  # noqa: E402
 
 import model  # noqa: E402
 import nano_model  # noqa: E402
@@ -30,6 +32,7 @@ from params import Controller, Motor  # noqa: E402
 from scenes.base import HAND, PLAYBACK, PIDScene, RunClock, RunSeries, render as _render  # noqa: E402,F401
 from visuals.camera import Camera  # noqa: E402
 from visuals.field import Field  # noqa: E402
+from visuals.layout import Z_UI, baseline, text as label_text  # noqa: E402
 from visuals.panel import GraphPanel  # noqa: E402
 from visuals.robot import Robot  # noqa: E402
 
@@ -37,6 +40,8 @@ I_COLOR = "#F87171"          # И: красный — отличается от 
 Z_DECOR = 0.2                # над линиями поля (0), под колесами (1)
 MOTION = 8.0                 # движение в подсцене, с видео (прогон с докатыванием, маневр)
 SEGMENTS = {}                # имя сцены → моменты конца подсцен в видео, с (заполняется при рендере)
+FAST = 3.0                   # ускорение простой езды по линии (сцена 4a), максимум; 1,0 — без ускорения
+FAST_TAU = 0.5               # плавность перехода ускорения: постоянная EMA, с времени модели
 HAND_V = 150.0               # «рука»: средняя скорость переноса, мм/с (время модели; на экране — с замедлением HAND)
 HAND_W = 120.0               # «рука»: средняя скорость поворота, °/с
 HAND_MIN = 0.4               # самая короткая перестановка, с
@@ -48,9 +53,97 @@ def hand_time(a, b):
     return max(np.hypot(b[0] - a[0], b[1] - a[1]) / HAND_V, np.degrees(dpsi) / HAND_W, HAND_MIN)
 
 
+def bisect(done, lo, hi, n=30):
+    """Наименьшее x в [lo, hi], при котором done(x) истинно (done монотонна): подбор времени команды, угла."""
+    for _ in range(n):
+        mid = (lo + hi) / 2
+        lo, hi = (lo, mid) if done(mid) else (mid, hi)
+    return (lo + hi) / 2
+
+
+def fit_run(simulate, brake, target):
+    """Прогон run = simulate(t_end), который вместе с докатыванием brake(run) длится target секунд модели
+    (подстройка t_end по перебору/недобору, до 6 шагов). Возвращает (run, stop)."""
+    t_end = target - 0.25
+    for _ in range(6):
+        run = simulate(round(t_end, 3))
+        stop = brake(run)
+        over = run.t[-1] + stop.t[-1] - target
+        if abs(over) <= 0.01:
+            break
+        t_end -= over + 0.005
+    return run, stop
+
+
 def rotation(a):
     c, s = np.cos(a), np.sin(a)
     return np.array([[c, -s], [s, c]])
+
+
+def warp(t0, t1, zones, fast=None, tau=FAST_TAU, speed=PLAYBACK, dt=0.002):
+    """Ускорение проигрывания на участке модели [t0, t1]: в зонах zones = [(a, b), ...] (время модели) кратность 1,
+    вне их — fast. Переход плавный: EMA вперед и назад по времени модели, берется меньшая — так к началу зоны
+    кратность уже 1 и после зоны растет постепенно. Возвращает (длительность видео, rate_func для t, τ, k(τ))."""
+    fast = FAST if fast is None else fast
+    tau_grid = np.arange(t0, t1 + dt / 2, dt)
+    target = np.full(len(tau_grid), float(fast))
+    for a, b in zones:
+        target[(tau_grid >= a) & (tau_grid <= b)] = 1.0
+    alpha = 1 - np.exp(-dt / tau)
+    fwd, bwd = target.copy(), target.copy()
+    for i in range(1, len(target)):
+        fwd[i] = fwd[i - 1] + (target[i] - fwd[i - 1]) * alpha
+    for i in range(len(target) - 2, -1, -1):
+        bwd[i] = bwd[i + 1] + (target[i] - bwd[i + 1]) * alpha
+    k = np.maximum(np.minimum(fwd, bwd), 1.0)
+    video = np.concatenate([[0.0], np.cumsum(dt / (speed * (k[1:] + k[:-1]) / 2))])
+    total = float(video[-1])
+
+    def rate(alpha_):
+        return float((np.interp(alpha_ * total, video, tau_grid) - t0) / max(t1 - t0, 1e-9))
+    return total, rate, tau_grid, k
+
+
+def path_time(traj, dist):
+    """Время модели, когда середина оси прошла dist мм от начала траектории (по пути колес)."""
+    s = (traj.sL + traj.sR) / 2 - (traj.sL[0] + traj.sR[0]) / 2
+    return float(np.interp(dist, s, traj.t))
+
+
+class RateLabel(VGroup):
+    """Пометка ускорения «×4,0» справа в строке заголовка: текущая кратность, один знак после запятой;
+    при ×1,0 гаснет. Слоты под символы — как visuals.panel.Number (состав объектов не меняется)."""
+    SLOTS = 5
+
+    def __init__(self, fr, st, right_px=None):
+        super().__init__(*[VMobject(fill_color=st.muted, fill_opacity=1, stroke_width=0) for _ in range(self.SLOTS)])
+        self.fr, self.st, self.cache = fr, st, {}
+        right_px = fr.layout.graph_w_px - fr.layout.margin_px if right_px is None else right_px   # край панели
+        self.right = fr.px(right_px, 0)[0]
+        ref = label_text(fr, "Кубик", st.title_px, st.text, st, weight=st.title_weight)
+        ref.move_to(fr.px(fr.layout.margin_px, fr.layout.header_y_px), aligned_edge=LEFT)
+        self.base = baseline(ref)
+        self.set_z_index(Z_UI)
+        self.set_value(1.0)
+
+    def _glyphs(self, s):
+        if s not in self.cache:
+            t = label_text(self.fr, s, self.st.text_px, self.st.muted, self.st)
+            ref = np.array([t.get_right()[0], baseline(t), 0.0])
+            self.cache[s] = [g.points - ref for g in t]
+        return self.cache[s]
+
+    def set_value(self, k):
+        s = f"×{k:.1f}".replace(".", ",")
+        glyphs = self._glyphs(s)
+        anchor = np.array([self.right, self.base, 0.0])
+        for j, slot in enumerate(self):
+            if j < len(glyphs):
+                slot.set_points(glyphs[j] + anchor)
+            else:
+                slot.clear_points()
+        self.set_fill(opacity=float(np.clip((k - 1.0) / 0.15, 0, 1)))
+        return self
 
 
 class RotCamera(Camera):
@@ -97,7 +190,7 @@ class Decor(VGroup):
 class NanoScene(PIDScene):
     """PIDScene с датчиками нового курса, кругами трека и камерой, повернутой под стартовый курс робота.
 
-    robot_cls — класс робота (урок 4: с дальномером); field_items(view) — свои элементы поля (кубик, луч).
+    robot_cls — класс робота (урок 4: с дальномером); field_items(view) — свои элементы поля (кубик).
     """
     robot_cls = Robot
 
@@ -121,6 +214,19 @@ class NanoScene(PIDScene):
         if check and abs(took - MOTION) > 0.3:
             warnings.warn(f"{type(self).__name__}: движение в подсцене {len(SEGMENTS[type(self).__name__])} — "
                           f"{took:.1f} с (MOTION = {MOTION:g} с)")
+
+    def advance_fast(self, t_to, zones, *extra, fast=None):
+        """Проиграть траекторию до t_to с ускорением вне зон zones (см. warp); пометка self.rate (RateLabel),
+        если есть, показывает текущую кратность."""
+        t0 = self.t.get_value()
+        total, rate, tau, k = warp(t0, t_to, zones, fast, speed=self.speed)
+        label = getattr(self, "rate", None)
+        if label is not None:
+            label.add_updater(lambda m: m.set_value(float(np.interp(self.t.get_value(), tau, k))))
+        self.play(self.t.animate.set_value(t_to), *extra, run_time=total, rate_func=rate)
+        if label is not None:
+            label.clear_updaters()
+            label.set_value(1.0)
 
     def hand_to(self, target, *extra):
         """Переставить робота «рукой» в позу target (сдвиг и поворот вместе, колеса не крутятся) — с одной
@@ -181,18 +287,12 @@ class NanoRunSeries(NanoScene, RunSeries):
         return nano_model.cached_simulate(self.track, tuple(float(v) for v in pose), ctrl=c, t_end=round(t_end, 3),
                                           lost_dist=np.inf, **extra)
 
+    def brake(self, run):
+        return model.brake(self.track, run, geom=self.geom, sensor=self.sensor, motor=Motor())
+
     def fit_run(self, pose, ctrl, video=MOTION):
         """Прогон, который вместе с докатыванием занимает video секунд видео."""
-        target = video * self.speed
-        t_end = target - 0.25
-        for _ in range(6):
-            run = self.simulate(pose, ctrl, t_end)
-            stop = model.brake(self.track, run, geom=self.geom, sensor=self.sensor, motor=Motor())
-            over = run.t[-1] + stop.t[-1] - target
-            if abs(over) <= 0.01:
-                break
-            t_end -= over + 0.005
-        return run
+        return fit_run(lambda t: self.simulate(pose, ctrl, t), self.brake, video * self.speed)[0]
 
     def plan(self):
         """Прогоны всех подсцен заранее: шкала времени графика — по самому длинному."""
@@ -223,7 +323,7 @@ class NanoRunSeries(NanoScene, RunSeries):
             self.add(curves)
             self.advance(self.traj.t[-1])
             clock.stop()
-            self.switch(model.brake(self.track, self.traj, geom=self.geom, sensor=self.sensor, motor=Motor()))
+            self.switch(self.brake(self.traj))
             self.advance(self.traj.t[-1], readout.opacity.animate.set_value(0.35))
             self.end_segment()
 
