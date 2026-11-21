@@ -1,7 +1,7 @@
 """Урок 2, сцена 2a. Ошибка err = L − R: робота качают «рукой» на месте над верхней внутренней прямой трека
 (камера повернута: робот смотрит вверх, по ходу — по часовой стрелке).
 
-Как олимпиадная сцена 1: промежуток 1 — L и R (0…1023); промежуток 2 — то же качание, L и R бледнеют,
+Как олимпиадная сцена 1: подсцена 1 — L и R (0…1023); подсцена 2 — то же качание, L и R бледнеют,
 шкала ±1023, под ними рисуется err. Линия 20 мм: пока она между датчиками, err ≈ 0 — «мертвая зона» шире,
 чем кажется; датчик целиком на линии — err ≈ ±700.
 """
@@ -50,8 +50,9 @@ class Nano2a(NanoScene):
         self.add(panel, *refs, cL, cR)
         self.play(panel.intro(), run_time=0.8)
 
+        self.begin_segment()
         self.advance(T)
-        self.end_block()
+        self.end_segment(check=False)                     # качание «рукой»: длина — от периода, не 8 с
 
         self.play(dim.animate.set_value(0.35), prog.animate.set_value(1.0), panel.plot.lo.animate.set_value(-1023),
                   ref_op.animate.set_value(0.0),
@@ -59,12 +60,13 @@ class Nano2a(NanoScene):
                   panel.set_text(ERR.label, [("err", "e"), ("L", "L"), ("R", "R")], "разность сигналов"),
                   run_time=T_SWAP)
         self.add(panel.curve(one, ERR, lambda: max(self.t.get_value() - T, 0.0)))
+        self.begin_segment()
         full = round(abs(sens.white[0] - sens.black[0]), -2)
         t_full = float(one.tt[np.argmax(np.abs(one.e) > 0.9 * full)])
         self.advance(T + t_full)
         self.advance(T + t_full + 0.8 * self.speed, panel.set_caption(f"err ≈ ±{full:.0f}, датчик целиком на линии"))
         self.advance(2 * T)
-        self.end_block()
+        self.end_segment(check=False)
 
 
 if __name__ == "__main__":

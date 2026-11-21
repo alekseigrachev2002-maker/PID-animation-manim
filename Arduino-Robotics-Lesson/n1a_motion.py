@@ -1,11 +1,12 @@
 """Урок 1, сцена 1a. Движение: команды моторам → как едет робот. Без датчиков.
 
-Три маневра, по одному на промежуток, друг за другом без перестановок: разгон с ростом ШИМ до 255 и остановка
-(после motors(0, 0) робот катится по инерции); оборот на месте на 360°; разные скорости колес — дуга вправо.
+Три маневра — три подсцены, друг за другом без перестановок: разгон с ростом ШИМ до 255 и остановка
+(после motors(0, 0) робот катится по инерции); оборот на месте на 360°; разные скорости колес — дуга влево.
 Камера едет за роботом (повернута: на старте робот едет вверх) — по верхней внутренней прямой трека, линия —
-эталон «прямо». Длительность маневра подобрана под промежуток: разгон — время роста ШИМ, дуга — время команды.
+эталон «прямо». Маневр — 8 с движения (MOTION): разгон — подобрано время роста ШИМ, дуга — время команды;
+оборот — ровно 360°, сколько займет. Смена подписи — сверх 8 с.
 """
-from nano_base import BLOCK, SLACK, NanoScene, RunClock, render  # первым: добавляет в путь корень репозитория
+from nano_base import MOTION, NanoScene, RunClock, render  # первым: добавляет в путь корень репозитория
 
 import numpy as np
 from manim import FadeOut
@@ -36,8 +37,8 @@ class Nano1a(NanoScene):
         return model.drive(track, pose, m["pwm"], t, stop=True, geom=self.geom, sensor=self.sensor)
 
     def fit(self, track, pose, m):
-        """Маневр на весь промежуток (минус смена текста и SLACK): подбор времени делением пополам."""
-        target = (BLOCK - T_TEXT - SLACK) * self.speed
+        """Маневр на MOTION секунд видео (оборот — на заданный угол): подбор времени делением пополам."""
+        target = MOTION * self.speed
         lo, hi = 0.05, 6.0
         for _ in range(30):
             mid = (lo + hi) / 2
@@ -71,12 +72,13 @@ class Nano1a(NanoScene):
             if i > 0:
                 self.play(FadeOut(curves), panel.set_text(m["code"], m["colors"], m["caption"]), run_time=T_TEXT)
                 self.switch(traj)
+            self.begin_segment()
             clock = RunClock(self.t)
             curves = panel.curves(traj, clock)
             self.add(curves)
             self.advance(traj.t[-1])
             clock.stop()
-            self.end_block()
+            self.end_segment(check=m["fit"] != "turn")
 
 
 if __name__ == "__main__":

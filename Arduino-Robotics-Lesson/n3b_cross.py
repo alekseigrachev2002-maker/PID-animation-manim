@@ -4,7 +4,7 @@
 пересекаются две кривые линии — и проезжает его. График — L и R с порогом 300: на перекрестке оба ниже порога.
 Камера повернута: на старте робот едет вверх.
 """
-from nano_base import BLOCK, SLACK, NanoScene, RunClock, render  # первым: добавляет в путь корень репозитория
+from nano_base import MOTION, NanoScene, RunClock, render  # первым: добавляет в путь корень репозитория
 
 import numpy as np
 from manim import ValueTracker
@@ -22,14 +22,14 @@ INTRO = 0.8
 
 class Nano3b(NanoScene):
     def runs(self, track):
-        """Прогон и докатывание на весь промежуток (минус заголовок)."""
-        target = (BLOCK - INTRO - SLACK) * self.speed
+        """Прогон и докатывание — MOTION = 8 с видео."""
+        target = MOTION * self.speed
         t_end = target - 0.25
         for _ in range(6):
             run = nano_model.cached_simulate(track, track.pose_at(START), ctrl=Controller(**PD), t_end=round(t_end, 3))
             stop = model.brake(track, run, geom=self.geom, sensor=self.sensor, motor=Motor())
             over = run.t[-1] + stop.t[-1] - target
-            if -0.01 <= over <= 0:
+            if abs(over) <= 0.01:
                 break
             t_end -= over + 0.005
         return run, stop
@@ -49,6 +49,7 @@ class Nano3b(NanoScene):
         clock = RunClock(self.t)
         self.add(panel, limit, panel.curves(run, clock))
         self.play(panel.intro(), run_time=INTRO)
+        self.begin_segment()
 
         both = (run.L < trs) & (run.R < trs)
         t_in, t_out = float(run.tt[np.argmax(both)]), float(run.tt[len(both) - 1 - np.argmax(both[::-1])])
@@ -59,7 +60,7 @@ class Nano3b(NanoScene):
         clock.stop()
         self.switch(stop)
         self.advance(stop.t[-1])
-        self.end_block()
+        self.end_segment()
 
 
 if __name__ == "__main__":

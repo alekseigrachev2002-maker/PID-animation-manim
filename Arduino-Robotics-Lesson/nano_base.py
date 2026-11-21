@@ -4,10 +4,10 @@
 - датчики — nano_track.SENSOR (белое 900, черное 200, линия 20 мм);
 - камера повернута так, что на старте сцены робот едет снизу вверх (поворот на всю сцену, не следит за курсом);
 - на поле — черные круги трека (Decor);
-- промежуток сцены — BLOCK = 10 с (у олимпиадных сцен 11 с);
-- прогоны регулятора — nano_model (с И); длина прогона подбирается так, чтобы промежуток был занят
-  движением, без пауз в конце; потерявший линию робот едет дальше;
-- «рука» везде с одной скоростью: время перестановки — от расстояния и угла (HAND_V, HAND_W), не от промежутка.
+- подсцена — MOTION = 8 с движения (прогон с докатыванием, маневр); заголовок, смена подписи и перестановка
+  «рукой» идут сверх этих 8 с и в счет не входят; конец каждой подсцены записывается в SEGMENTS (для картинок);
+- прогоны регулятора — nano_model (с И); длина прогона подбирается под 8 с; потерявший линию робот едет дальше;
+- «рука» везде с одной скоростью: время перестановки — от расстояния и угла (HAND_V, HAND_W).
 Замедление (PLAYBACK — езда, HAND — «рука») и панель графиков — общие с олимпиадными сценами.
 """
 import sys
@@ -35,8 +35,8 @@ from visuals.robot import Robot  # noqa: E402
 
 I_COLOR = "#F87171"          # И: красный — отличается от розового D, при дальтонизме теплее зеленого P
 Z_DECOR = 0.2                # над линиями поля (0), под колесами (1)
-SLACK = 0.25                 # запас до конца промежутка, с: округление кадров и пауза «все видно»
-BLOCK = 10.0                 # длина промежутка сцены нового курса, с
+MOTION = 8.0                 # движение в подсцене, с видео (прогон с докатыванием, маневр)
+SEGMENTS = {}                # имя сцены → моменты конца подсцен в видео, с (заполняется при рендере)
 HAND_V = 150.0               # «рука»: средняя скорость переноса, мм/с (время модели; на экране — с замедлением HAND)
 HAND_W = 120.0               # «рука»: средняя скорость поворота, °/с
 HAND_MIN = 0.4               # самая короткая перестановка, с
@@ -108,18 +108,19 @@ class NanoScene(PIDScene):
         super().setup()
         self.sensor = SENSOR
 
-    def end_block(self):
-        """Конец промежутка BLOCK = 10 с: пауза до границы ровно в кадрах (как в PIDScene, но свой BLOCK).
-        Предупреждения: промежуток длиннее BLOCK или в конце стоим без движения дольше 0,8 с."""
-        self._blocks = getattr(self, "_blocks", 0) + 1
-        need = round(self._blocks * BLOCK * config.frame_rate) - getattr(self, "frames", 0)
-        if need < 0:
-            warnings.warn(f"{type(self).__name__}: промежуток {self._blocks} длиннее BLOCK = {BLOCK} с "
-                          f"на {-need / config.frame_rate:.1f} с")
-        elif need / config.frame_rate > 0.8:
-            warnings.warn(f"{type(self).__name__}: в промежутке {self._blocks} пауза {need / config.frame_rate:.1f} с")
-        if need > 0:
-            self.wait((need - 0.5) / config.frame_rate, frozen_frame=False)
+    def begin_segment(self):
+        """Начало движения подсцены (после заголовка, смены подписи, перестановки «рукой»)."""
+        self._seg_start = getattr(self, "frames", 0) / config.frame_rate
+
+    def end_segment(self, check=True):
+        """Конец подсцены: момент — в SEGMENTS (картинки урока берут кадр отсюда); если движение не 8 с —
+        предупреждение (check=False — длина задана самим движением: качание «рукой», оборот на угол)."""
+        now = getattr(self, "frames", 0) / config.frame_rate
+        SEGMENTS.setdefault(type(self).__name__, []).append(now)
+        took = now - getattr(self, "_seg_start", now)
+        if check and abs(took - MOTION) > 0.3:
+            warnings.warn(f"{type(self).__name__}: движение в подсцене {len(SEGMENTS[type(self).__name__])} — "
+                          f"{took:.1f} с (MOTION = {MOTION:g} с)")
 
     def hand_to(self, target, *extra):
         """Переставить робота «рукой» в позу target (сдвиг и поворот вместе, колеса не крутятся) — с одной
@@ -164,9 +165,9 @@ class NanoRunSeries(NanoScene, RunSeries):
     """Серия прогонов регулятора (как RunSeries) на треке Short Track; регулятор — с И.
 
     runs = [(dict(kp=0.1, kd=1.0, ki=0.002), "подпись"), ...]; одно число — только P (kd = 0).
-    Длина прогона — сколько влезает в промежуток: прогон + докатывание после motors(0, 0) заканчиваются
-    за SLACK до конца промежутка. Потерявший линию робот едет дальше (как настоящий). Между прогонами робота
-    возвращают «рукой» (hand_to), кривые гаснут и подпись меняется в это же время.
+    Прогон + докатывание после motors(0, 0) — MOTION = 8 с видео. Потерявший линию робот едет дальше (как
+    настоящий). Между прогонами робота возвращают «рукой» (hand_to), кривые гаснут и подпись меняется в это же
+    время — сверх 8 с.
     """
     t_on = 0.4            # строка ШИМ снова яркая
 
@@ -180,30 +181,22 @@ class NanoRunSeries(NanoScene, RunSeries):
         return nano_model.cached_simulate(self.track, tuple(float(v) for v in pose), ctrl=c, t_end=round(t_end, 3),
                                           lost_dist=np.inf, **extra)
 
-    def fit_run(self, pose, ctrl, video):
-        """Прогон, который вместе с докатыванием занимает video секунд видео (минус SLACK)."""
-        target = (video - SLACK) * self.speed
+    def fit_run(self, pose, ctrl, video=MOTION):
+        """Прогон, который вместе с докатыванием занимает video секунд видео."""
+        target = video * self.speed
         t_end = target - 0.25
         for _ in range(6):
             run = self.simulate(pose, ctrl, t_end)
             stop = model.brake(self.track, run, geom=self.geom, sensor=self.sensor, motor=Motor())
             over = run.t[-1] + stop.t[-1] - target
-            if -0.01 <= over <= 0:
+            if abs(over) <= 0.01:
                 break
             t_end -= over + 0.005
         return run
 
     def plan(self):
-        """Прогоны всех промежутков заранее (шкала времени графика — по самому длинному). Время на возврат «рукой»
-        зависит от того, где остановился прошлый прогон, — поэтому по очереди."""
-        runs, video = [], BLOCK - 0.8                                   # первый: после заголовка
-        for i, run in enumerate(self.runs):
-            runs.append(self.fit_run(self.start(i), run[0], video))
-            stop = model.brake(self.track, runs[-1], geom=self.geom, sensor=self.sensor, motor=Motor())
-            end = (stop.x[-1], stop.y[-1], stop.psi[-1])
-            if i + 1 < len(self.runs):
-                video = BLOCK - hand_time(end, self.start(i + 1)) / HAND - self.t_on
-        return runs
+        """Прогоны всех подсцен заранее: шкала времени графика — по самому длинному."""
+        return [self.fit_run(self.start(i), run[0]) for i, run in enumerate(self.runs)]
 
     def panel(self, t_max):
         ticks = [t for t in np.arange(0, t_max, 0.5)]
@@ -219,11 +212,12 @@ class NanoRunSeries(NanoScene, RunSeries):
         self.add(panel)
         self.play(panel.intro(), run_time=0.8)
         readout, curves = panel.readout, None
-        for i, ((ctrl, caption, *text), run) in enumerate(zip(self.runs, runs)):   # прогон — промежуток BLOCK
+        for i, ((ctrl, caption, *text), run) in enumerate(zip(self.runs, runs)):   # прогон — подсцена
             if i > 0:
                 self.hand_to(self.start(i), FadeOut(curves), panel.set_text(*text, caption=caption))
                 self.switch(run)
                 self.play(readout.opacity.animate.set_value(1.0), run_time=self.t_on)
+            self.begin_segment()
             clock = RunClock(self.t)
             curves = panel.curves(self.traj, clock)
             self.add(curves)
@@ -231,7 +225,7 @@ class NanoRunSeries(NanoScene, RunSeries):
             clock.stop()
             self.switch(model.brake(self.track, self.traj, geom=self.geom, sensor=self.sensor, motor=Motor()))
             self.advance(self.traj.t[-1], readout.opacity.animate.set_value(0.35))
-            self.end_block()
+            self.end_segment()
 
 
 def render(scene_cls, quality="480p", still=False, preview=True):
