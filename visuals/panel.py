@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from manim import (LEFT, RIGHT, UP, AnimationGroup, DashedLine, Dot, FadeIn, FadeOut, Line, Rectangle, RoundedRectangle,
-                   Succession, ValueTracker, VGroup, VMobject)
+                   Succession, ValueTracker, VGroup, VMobject, config)
 
 from params import Style
 from visuals.layout import Z_UI, baseline, on_baseline, pick_font, text
@@ -145,6 +145,41 @@ class Header(VGroup):
     def set_phrase(self, phrase, caption):
         """Смена этапа: новая фраза и пояснение."""
         return [self._swap("phrase", self._phrase(phrase)), self.set_caption(caption)]
+
+
+class WideHeader(Header):
+    """Header без панели графиков: пояснение может идти до правого края кадра."""
+
+    def _check_fit(self):
+        fr = self.fr
+        if self.caption.get_right()[0] > fr.px(fr.layout.width_px - fr.layout.margin_px, 0)[0]:
+            warnings.warn(f"шапка: пояснение «{self.caption_text}» не помещается в кадр — сократите текст")
+
+
+class TitleBar(VGroup):
+    """Шапка-полоса на всю ширину кадра — для сцен без панели графиков (вид 16:9, panel_bg = False).
+
+    Темная полоса цвета панели графиков высотой HEIGHT_PX; в ней заголовок и пояснение шага там же и тем же
+    шрифтом, что в шапке панели графиков (Header). intro() — заголовок выезжает слева; set_caption() — смена
+    пояснения swap (старое уходит вверх, новое появляется снизу). Пометку ускорения (RateLabel) ставить справа
+    на строке заголовка: right_px = fr.layout.width_px − fr.layout.margin_px.
+    """
+    HEIGHT_PX = 140.0
+
+    def __init__(self, fr, phrase, caption, st=Style()):
+        super().__init__()
+        self.fr, self.st = fr, st
+        self.bg = Rectangle(width=config.frame_width, height=self.HEIGHT_PX * fr.unit, stroke_width=0,
+                            fill_color=st.graph_bg, fill_opacity=1)
+        self.bg.move_to(fr.px(fr.layout.width_px / 2, self.HEIGHT_PX / 2)).set_z_index(Z_UI - 1)
+        self.header = WideHeader(fr, phrase, caption, st)
+        self.add(self.bg, self.header)
+
+    def intro(self):
+        return self.header.intro()
+
+    def set_caption(self, s):
+        return self.header.set_caption(s)
 
 
 # ---------- легенда ----------

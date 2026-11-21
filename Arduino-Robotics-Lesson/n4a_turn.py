@@ -29,7 +29,7 @@ from nano_base import NanoScene, render  # первым: добавляет в �
 from dataclasses import dataclass
 
 import numpy as np
-from manim import LEFT, UP, FadeIn, FadeOut, Line, RoundedRectangle, ValueTracker, VGroup
+from manim import UP, FadeIn, FadeOut, Line, ValueTracker, VGroup
 
 import model
 from model import bisect, end_pose, sonar_distance
@@ -37,8 +37,8 @@ from nano_track import S_FINISH_OUTER, S_X_IN, S_X_OTHER, ShortTrack
 from params import Controller, Geometry, Layout, Motor
 from scenes.base import RunClock, path_time
 from track import Block
-from visuals.layout import Frame, Z_UI, on_baseline, pick_font, text
-from visuals.panel import GraphPanel, RateLabel, Signal, row_baseline
+from visuals.layout import Frame, Z_UI, text
+from visuals.panel import GraphPanel, RateLabel, Signal, TitleBar
 from visuals.robot import SonarRobot
 
 START = S_FINISH_OUTER + Geometry().sensor_y + 25.0   # верхняя внешняя прямая: датчики уже за линией старт/финиш
@@ -65,6 +65,7 @@ U_FORMULA = ("control = uP + uD + uI", [("control", "u"), ("uP", "e"), ("uD", "D
 D_FORMULA = (f"dist < {LIMIT_CM}", [("dist", "dist")])
 SIDE = {+1: "налево", -1: "направо", 0: "прямо"}
 FINISH_AT = {+1: 1, -1: 3, 0: 1}   # куда поехал робот → номер финишного перекрестка по маршруту (см. докстринг)
+TITLE = "Кубик на перекрестке"
 
 
 @dataclass(frozen=True)
@@ -264,7 +265,7 @@ class Nano4aGraph(Nano4a):
 
     def u_panel(self, run, caption):
         T = run.t[-1]
-        return GraphPanel(self.fr, self.st, "Кубик на перекрестке", caption, y=("u", *U_RANGE), t_max=T * 1.04,
+        return GraphPanel(self.fr, self.st, TITLE, caption, y=("u", *U_RANGE), t_max=T * 1.04,
                           t_ticks=np.arange(0, T, 2.0 if T > 12 else 1.0), signals=U_SIGNALS,
                           formula=U_FORMULA[0], formula_colors=U_FORMULA[1])
 
@@ -329,30 +330,19 @@ class Nano4aGraph(Nano4a):
 
 
 class Nano4aFull(Nano4a):
-    """Вид 16:9 без графика: трек и робот на весь кадр, подпись шага сверху слева, кратность — справа вверху."""
+    """Вид 16:9 без графика: трек и робот на весь кадр, сверху — шапка-полоса (TitleBar) с заголовком, пояснением
+    шага и кратностью ускорения справа."""
     panel_bg = False                                                       # без темной панели графиков
 
-    def step(self, s):
-        """Подпись шага: белый текст на темной плашке сверху слева (как блок формулы)."""
-        fr, st = self.fr, self.st
-        t = text(fr, s, st.text_px, st.text, st, font=pick_font(st.font))
-        t.move_to(fr.px(fr.layout.margin_px + 14, 0), aligned_edge=LEFT)
-        on_baseline(t, row_baseline(fr, fr.layout.header_y_px, st))
-        box = RoundedRectangle(corner_radius=7 * fr.unit, width=t.width + 28 * fr.unit, height=44 * fr.unit,
-                               stroke_width=0, fill_color=st.block, fill_opacity=0.92)
-        box.move_to([t.get_center()[0], row_baseline(fr, fr.layout.header_y_px, st) + 0.3 * st.text_px * fr.unit, 0])
-        return VGroup(box, t).set_z_index(Z_UI)
-
     def ui_open(self, p, seg1, caption):
-        self.show(self.track, seg1, anchor_px=(640.0, 400.0))           # робот в середине кадра
+        self.show(self.track, seg1, anchor_px=(640.0, 430.0))           # робот ниже середины: впереди место
+        self.bar = TitleBar(self.fr, TITLE, caption, self.st)
         self.rate = RateLabel(self.fr, self.st, right_px=self.fr.layout.width_px - self.fr.layout.margin_px)
-        self.label = self.step(caption)
-        self.add(self.rate)
-        self.play(FadeIn(self.label), run_time=0.8)
+        self.add(self.bar, self.rate)
+        self.play(self.bar.intro(), run_time=0.8)
 
     def ui_caption(self, caption):
-        old, self.label = self.label, self.step(caption)
-        return [FadeOut(old, shift=0.08 * UP), FadeIn(self.label, shift=0.08 * UP)]
+        return [self.bar.set_caption(caption)]
 
 
 # классы для Manim: версия × вид — Nano4aLeft, Nano4aLeftFull, Nano4aRight, …
