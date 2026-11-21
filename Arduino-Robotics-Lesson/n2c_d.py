@@ -19,7 +19,7 @@ class Nano2c(NanoRunSeries):
     signals = [Signal("uP", "uP", "e"), Signal("uD", "uD", "D")]
     y = ("u", -100, 100)
     runs = [
-        (dict(kp=KP_ALMOST, kd=0.0), "kp = 0,06: вылет"),
+        (dict(kp=KP_ALMOST, kd=0.0), "kp = 0,06: съезд"),
         (dict(kp=KP_ALMOST, kd=1.0), "kd = 1, вписался"),
     ]
 

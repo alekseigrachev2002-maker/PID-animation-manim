@@ -21,10 +21,10 @@ T_TEXT = 0.8        # заголовок в начале / смена подпи
 MANEUVERS = [
     dict(caption="разгон и остановка", code="motors(pwm, pwm)", colors=[("pwm", "L", 0), ("pwm", "R", 1)],
          fit="ramp"),
-    dict(caption="оборот на месте", code="motors(-140, 140)", colors=[("-140", "L"), ("140", "R", 1)],
-         pwm=(-140, 140), fit="turn", turn=360),
-    dict(caption="левое колесо быстрее — вправо", code="motors(150, 90)", colors=[("150", "L"), ("90", "R")],
-         pwm=(150, 90), fit="on"),
+    dict(caption="оборот на месте", code="motors(-250, 250)", colors=[("-250", "L"), ("250", "R", 1)],
+         pwm=(-250, 250), fit="turn", turn=360),
+    dict(caption="правое колесо быстрее — влево", code="motors(150, 180)", colors=[("150", "L"), ("180", "R")],
+         pwm=(150, 180), fit="on"),
 ]
 
 
