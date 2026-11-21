@@ -150,7 +150,8 @@ class Header(VGroup):
 class TitleHeader(Header):
     """Шапка в одну строку для полосы TitleBar: заголовок — на месте заголовка остальных сцен (тот же отступ слева
     и сверху), пояснение — сразу правее заголовка, на его линии шрифта. Заголовок у версий одной сцены одинаковый,
-    поэтому левый край пояснения постоянный. Смена пояснения — swap, как в Header."""
+    поэтому левый край пояснения постоянный. Пояснение центрировано по высоте полосы: середина строчных букв —
+    на header_y_px (как середина заголовка). Смена пояснения — swap, как в Header."""
     GAP_PX = 28.0          # от заголовка до пояснения
     RIGHT_PX = 110.0       # справа оставить место под пометку ускорения «×k»
 
@@ -160,7 +161,7 @@ class TitleHeader(Header):
     def _caption(self, s):
         t = text(self.fr, s, self.st.text_px, self.st.muted, self.st)
         t.move_to([self._caption_x(), 0, 0], aligned_edge=LEFT)
-        return on_baseline(t, baseline(self.phrase)).set_z_index(Z_UI)
+        return on_baseline(t, row_baseline(self.fr, self.fr.layout.header_y_px, self.st)).set_z_index(Z_UI)
 
     def _check_fit(self):
         fr = self.fr
@@ -398,10 +399,11 @@ class MotorReadout(VGroup):
 class RateLabel(VGroup):
     """Пометка ускорения «×3,0» на строке заголовка, правый край — right_px (по умолчанию край панели графиков),
     цвет — color (по умолчанию приглушенный): текущая кратность, один знак после запятой; при ×1,0 гаснет.
-    Слоты под символы — как Number."""
+    centered=True — по середине строки заголовка (середина строчных букв на header_y_px, как пояснение в TitleBar),
+    иначе — на линии шрифта заголовка. Слоты под символы — как Number."""
     SLOTS = 5
 
-    def __init__(self, fr, st=Style(), right_px=None, color=None):
+    def __init__(self, fr, st=Style(), right_px=None, color=None, centered=False):
         color = st.muted if color is None else color
         super().__init__(*[VMobject(fill_color=color, fill_opacity=1, stroke_width=0) for _ in range(self.SLOTS)])
         self.fr, self.st, self.cache = fr, st, {}
@@ -409,7 +411,7 @@ class RateLabel(VGroup):
         self.right = fr.px(right_px, 0)[0]
         ref = text(fr, "Кубик", st.title_px, st.text, st, weight=st.title_weight)
         ref.move_to(fr.px(fr.layout.margin_px, fr.layout.header_y_px), aligned_edge=LEFT)
-        self.base = baseline(ref)                     # линия шрифта заголовка
+        self.base = row_baseline(fr, fr.layout.header_y_px, st) if centered else baseline(ref)   # линия шрифта
         self.set_z_index(Z_UI)
         self.set_value(1.0)
 

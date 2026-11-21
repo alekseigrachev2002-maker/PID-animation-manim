@@ -346,7 +346,7 @@ class Nano4aFull(Nano4a):
         self.show(self.track, seg1, anchor_px=(640.0, 420.0))           # робот ниже середины: впереди место
         self.bar = TitleBar(self.fr, TITLE, caption, self.st)
         self.rate = RateLabel(self.fr, self.st, right_px=self.fr.layout.width_px - self.fr.layout.margin_px,
-                              color=self.st.text)
+                              color=self.st.text, centered=True)
         self.add(self.bar, self.rate)
         self.play(self.bar.intro(), run_time=0.8)
 
