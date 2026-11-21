@@ -3,9 +3,9 @@
 Видео всех сцен рендерятся в videos/ (<Сцена>_<качество>.mp4, общая папка с олимпиадными сценами) и копируются
 с именами курса в out/arduino/: scene-<урок><буква>-<тема>.mp4 и .png (кадр из того же видео, 1920×1080).
 Момент кадра — в KEYS: номер подсцены и сдвиг от ее конца (концы подсцен записывает сцена при рендере,
-nano_base.SEGMENTS). Черновик: python Arduino-Robotics-Lesson/nano_lessons.py 480p
+scenes.base.SEGMENTS). Черновик: python Arduino-Robotics-Lesson/nano_lessons.py 480p
 """
-from nano_base import ROOT, SEGMENTS, render  # первым: добавляет в путь корень репозитория
+from nano_base import ROOT, render  # первым: добавляет в путь корень репозитория
 
 import shutil
 import sys
@@ -17,6 +17,7 @@ from n2c_d import Nano2c
 from n3a_i_offset import Nano3a
 from n3b_cross import Nano3b
 from n4a_turn import FILES, SCENES
+from scenes.base import SEGMENTS
 from scenes.lessons import END, LIMIT, frame_at, save_png
 
 OUT = ROOT / "out" / "arduino"

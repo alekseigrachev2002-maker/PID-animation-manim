@@ -7,11 +7,11 @@ import numpy as np
 from manim import WHITE, Circle, Difference, ManimColor, Rectangle, RoundedRectangle, Union, VGroup, VMobject, \
     interpolate_color
 
-from params import Geometry, Sensor, Style
+from params import Geometry, Sensor, Sonar, Style
 
 HALO_R = (11.0, 8.0, 5.5)   # ореол метки: круги внахлест, к краю свечение слабее
 N_TREAD = 18                # шевронов елочки по окружности колеса
-Z = dict(wheel=1, tread=2, axle=2.5, board=3, chassis=4, marker=5)
+Z = dict(wheel=1, tread=2, axle=2.5, board=3, chassis=4, marker=5, sonar=6)
 
 
 def _rect(w, h, cx, cy, r=0.0, **kw):
@@ -148,3 +148,39 @@ class Robot(VGroup):
                 m.set_stroke(width=self.fr.stroke_mm(1.6) * vis, opacity=0.9 if vis > 0 else 0)
                 i += 1
         return self
+
+
+# ---------- насадка: дальномер HC-SR04 в креплении (робот нового курса, урок 4) ----------
+
+def _part(w, h, cx, cy, r=0.0, **kw):
+    return RoundedRectangle(corner_radius=r or 1e-3, width=w, height=h, **kw).move_to([cx, cy, 0])
+
+
+def sonar_parts(s: Sonar, edge_w):
+    """Крепление с дальномером сверху, мм в системе робота (+y вперед): лапка, кромка платы, «уши» паза,
+    излучатели и пластина поверх них (излучатели выходят через окна). edge_w — контур белого пластика."""
+    white = dict(fill_color=s.mount, fill_opacity=1, stroke_color=s.mount_edge, stroke_width=edge_w)
+    y0 = s.plate_y
+    tab = _part(s.tab_w, s.tab_d, 0, y0 - s.tab_d / 2, 1.5, **white)
+    pcb = _part(s.pcb_w, s.pcb_t, 0, y0 - s.pcb_t / 2, fill_color=s.pcb, fill_opacity=1, stroke_width=0)
+    ears = VGroup(*[_part(s.ear_x[1] - s.ear_x[0], s.ear_d, sx * sum(s.ear_x) / 2, y0 - s.ear_d / 2, 0.8, **white)
+                    for sx in (-1, 1)])
+    cans = VGroup()
+    for side in (-1, 1):
+        body = _part(s.can_d, s.can_h, side * s.can_x, y0 + s.can_h / 2, 1.5, fill_color=s.can, fill_opacity=1,
+                     stroke_width=0)
+        face = _part(s.can_d - 2.5, 1.6, side * s.can_x, y0 + s.can_h - 0.8, 0.6, fill_color=s.mesh,
+                     fill_opacity=1, stroke_width=0)
+        cans.add(VGroup(body, face))
+    plate = _part(s.plate_w, s.plate_t, 0, y0 + s.plate_t / 2, 0.8, **white)
+    return VGroup(tab, pcb, ears, cans, plate)
+
+
+class SonarRobot(Robot):
+    """Робот с дальномером спереди (крепление на отверстиях шасси, винты белые — не рисуются)."""
+
+    def __init__(self, fr, geom=Geometry(), st=Style(), sensor=Sensor(), sensors=True, sonar=Sonar()):
+        super().__init__(fr, geom, st, sensor, sensors)
+        self.sonar = sonar
+        part = sonar_parts(sonar, fr.stroke(0.8)).scale(fr.mm, about_point=np.zeros(3)).shift(self.pos)
+        self.add(part.set_z_index(Z["sonar"]))

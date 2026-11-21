@@ -5,13 +5,14 @@
 шкала ±1023, под ними рисуется err. Линия 20 мм: пока она между датчиками, err ≈ 0 — «мертвая зона» шире,
 чем кажется; датчик целиком на линии — err ≈ ±700.
 """
-from nano_base import HAND, NanoScene, render  # первым: добавляет в путь корень репозитория
+from nano_base import NanoScene, render  # первым: добавляет в путь корень репозитория
 
 import numpy as np
 from manim import ValueTracker
 
 import model
 from nano_track import ShortTrack
+from scenes.base import HAND
 from scenes.s1_error import swing
 from visuals.panel import ERR, GraphPanel, Signal
 

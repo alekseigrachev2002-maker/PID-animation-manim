@@ -1,7 +1,13 @@
 """Основа сцен.
 
 PIDScene — стенд: трекер времени t, камера, поле, робот и элементы, которым каждый кадр раздается состояние.
-RunSeries — серия прогонов регулятора: прогон → стоп → возврат → следующий (сцены 2a, 2b и дальше).
+    Атрибуты сцены: sensor (датчики), robot_cls (робот, например с дальномером), rot (поворот камеры на всю сцену:
+    число или "start" — стартовый курс робота вверх), fast (ускорение простой езды), panel_bg (темная панель).
+    Время: промежутки BLOCK (end_block — сцена ровно N·BLOCK) или подсцены (begin_segment / end_segment — моменты
+    концов подсцен в SEGMENTS, для картинок уроков). advance_fast — проигрывание с ускорением вне зон, hand_to —
+    перестановка «рукой» с одной скоростью для всех сцен.
+RunSeries — серия прогонов регулятора: прогон → стоп → возврат → следующий (олимпиадные сцены 2a–2c).
+MotionRunSeries — то же, но прогон с докатыванием — MOTION секунд видео, возврат «рукой» сверх (новый курс).
 render() — запуск кнопкой ▶ в PyCharm (качество, видео или последний кадр).
 """
 import sys
@@ -26,10 +32,56 @@ GENERAL = 0.75  # общий коэффициент замедления (дол
 PLAYBACK = 0.4 * GENERAL  # езда во всех сценах (сейчас 0.3 — в 3,3 раза медленнее реального времени)
 BLOCK = 11.0  # длина одного промежутка сцены, с: сцена — целое число промежутков (0 — 3, 1 — 2, 2a — 3, 2b/2c — 2, 3 — 1)
 HAND = 0.85 * GENERAL  # движения «рукой»: перестановка, линия подъезжает, поворот на месте, качание в сцене 1
+MOTION = 8.0  # подсцена: движение, с видео (прогон с докатыванием, маневр); заголовок, подписи, «рука» — сверх
+SEGMENTS = {}  # имя сцены → моменты концов подсцен в видео, с (заполняется при рендере; картинки уроков)
+FAST_TAU = 0.5  # плавность перехода ускорения: постоянная EMA, с времени модели
+HAND_V = 150.0  # «рука»: средняя скорость переноса, мм/с (время модели; на экране — с замедлением HAND)
+HAND_W = 120.0  # «рука»: средняя скорость поворота, °/с
+HAND_MIN = 0.4  # самая короткая перестановка, с
+
+
+def hand_time(a, b):
+    """Время перестановки «рукой» из позы a в позу b (сдвиг и поворот вместе), с — одна скорость для всех сцен."""
+    dpsi = abs((b[2] - a[2] + np.pi) % (2 * np.pi) - np.pi)
+    return max(np.hypot(b[0] - a[0], b[1] - a[1]) / HAND_V, np.degrees(dpsi) / HAND_W, HAND_MIN)
+
+
+def warp(t0, t1, zones, fast, tau=FAST_TAU, speed=PLAYBACK, dt=0.002):
+    """Ускорение проигрывания на участке модели [t0, t1]: в зонах zones = [(a, b), ...] (время модели) кратность 1,
+    вне их — fast. Переход плавный: EMA вперед и назад по времени модели, берется меньшая — так к началу зоны
+    кратность уже 1 и после зоны растет постепенно. Возвращает (длительность видео, rate_func для t, τ, k(τ))."""
+    tau_grid = np.arange(t0, t1 + dt / 2, dt)
+    target = np.full(len(tau_grid), float(fast))
+    for a, b in zones:
+        target[(tau_grid >= a) & (tau_grid <= b)] = 1.0
+    alpha = 1 - np.exp(-dt / tau)
+    fwd, bwd = target.copy(), target.copy()
+    for i in range(1, len(target)):
+        fwd[i] = fwd[i - 1] + (target[i] - fwd[i - 1]) * alpha
+    for i in range(len(target) - 2, -1, -1):
+        bwd[i] = bwd[i + 1] + (target[i] - bwd[i + 1]) * alpha
+    k = np.maximum(np.minimum(fwd, bwd), 1.0)
+    video = np.concatenate([[0.0], np.cumsum(dt / (speed * (k[1:] + k[:-1]) / 2))])
+    total = float(video[-1])
+
+    def rate(alpha_):
+        return float((np.interp(alpha_ * total, video, tau_grid) - t0) / max(t1 - t0, 1e-9))
+    return total, rate, tau_grid, k
+
+
+def path_time(traj, dist):
+    """Время модели, когда середина оси прошла dist мм от начала траектории (по пути колес)."""
+    s = (traj.sL + traj.sR) / 2 - (traj.sL[0] + traj.sR[0]) / 2
+    return float(np.interp(dist, s, traj.t))
 
 
 class PIDScene(Scene):
     speed = PLAYBACK  # скорость проигрывания езды — одна для всех сцен; движения «рукой» — HAND
+    sensor = Sensor()  # датчики линии сцены
+    robot_cls = Robot  # робот (visuals.robot.SonarRobot — с дальномером)
+    rot = 0.0  # поворот камеры, рад; "start" — стартовый курс робота смотрит вверх
+    fast = 1.0  # ускорение простой езды (advance_fast); 1,0 — без ускорения
+    panel_bg = True  # темная панель графиков слева; False — поле на весь кадр
 
     def play(self, *args, **kwargs):
         """Как Scene.play, плюс счет кадров видео (frames) — по тому же правилу, что у Manim: шагов 1/fps в run_time.
@@ -49,21 +101,41 @@ class PIDScene(Scene):
             self.wait((need - 0.5) / config.frame_rate, frozen_frame=False)   # ровно need кадров
 
     def setup(self):
-        self.fr, self.st, self.geom, self.sensor = Frame(), Style(), Geometry(), Sensor()
+        self.fr, self.st, self.geom = Frame(), Style(), Geometry()
         self.t = ValueTracker(0.0)
-        self.add(backdrop(self.fr, self.st))
+        self.add(backdrop(self.fr, self.st, self.panel_bg))
+
+    # ---------- подсцены ----------
+
+    def begin_segment(self):
+        """Начало движения подсцены (после заголовка, смены подписи, перестановки «рукой»)."""
+        self._seg_start = getattr(self, "frames", 0) / config.frame_rate
+
+    def end_segment(self, check=True):
+        """Конец подсцены: момент — в SEGMENTS (картинки урока берут кадр отсюда); если движение не MOTION —
+        предупреждение (check=False — длина задана самим движением: качание «рукой», оборот на угол, ускорение)."""
+        now = getattr(self, "frames", 0) / config.frame_rate
+        SEGMENTS.setdefault(type(self).__name__, []).append(now)
+        took = now - getattr(self, "_seg_start", now)
+        if check and abs(took - MOTION) > 0.3:
+            warnings.warn(f"{type(self).__name__}: движение в подсцене {len(SEGMENTS[type(self).__name__])} — "
+                          f"{took:.1f} с (MOTION = {MOTION:g} с)")
 
     # ---------- стенд ----------
 
-    def show(self, track, traj, camera="follow", center=(0.0, 0.0), anchor_px=None, sensors=True, items=()):
+    def show(self, track, traj, camera="follow", center=(0.0, 0.0), anchor_px=None, sensors=True, items=(),
+             rot=None):
         """Поставить на стенд поле, робота и элементы items (у каждого — update_state(state)).
+        rot — поворот камеры (по умолчанию атрибут сцены rot; "start" — стартовый курс робота смотрит вверх).
 
         camera: "follow" или "fixed"; center — точка поля (мм) в точке экрана anchor_px (по умолчанию Layout.robot_px).
         """
         self.track, self.traj = track, traj
-        self.view = Camera(self.fr, camera, center, None if anchor_px is None else self.fr.px(*anchor_px))
+        rot = self.rot if rot is None else rot
+        rot = -float(traj.psi[0]) if rot == "start" else rot
+        self.view = Camera(self.fr, camera, center, None if anchor_px is None else self.fr.px(*anchor_px), rot)
         self.field = Field(self.view, track, self.sensor, self.st)
-        self.robot = Robot(self.fr, self.geom, self.st, self.sensor, sensors)
+        self.robot = self.robot_cls(self.fr, self.geom, self.st, self.sensor, sensors)
         self.items = [m for m in items if m is not None]
         self.s_off = np.zeros(2)  # перенос пути колес между отрезками, чтобы протектор не прыгал
 
@@ -71,7 +143,7 @@ class PIDScene(Scene):
             s = self.state()
             self.view.follow(s["x"], s["y"])
             self.field.update_view()
-            self.robot.place(self.view.point(s["x"], s["y"]), s["psi"])
+            self.robot.place(self.view.point(s["x"], s["y"]), s["psi"] + self.view.rot)
             self.robot.set_wheel_phase(s["sL"], s["sR"]).set_signals(*s["levels"])
             for m in self.items:
                 m.update_state(s)
@@ -118,6 +190,29 @@ class PIDScene(Scene):
         """Проиграть траекторию до момента t_to (плюс одновременные анимации extra)."""
         dur = (t_to - self.t.get_value()) / (speed or self.speed)
         self.play(self.t.animate.set_value(t_to), *extra, run_time=dur, rate_func=linear)
+
+    def advance_fast(self, t_to, zones, *extra, fast=None):
+        """Проиграть траекторию до t_to с ускорением fast (по умолчанию атрибут сцены) вне зон zones (см. warp);
+        пометка self.rate (visuals.panel.RateLabel), если есть, показывает текущую кратность."""
+        t0 = self.t.get_value()
+        total, rate, tau, k = warp(t0, t_to, zones, self.fast if fast is None else fast, speed=self.speed)
+        label = getattr(self, "rate", None)
+        if label is not None:
+            label.add_updater(lambda m: m.set_value(float(np.interp(self.t.get_value(), tau, k))))
+        self.play(self.t.animate.set_value(t_to), *extra, run_time=total, rate_func=rate)
+        if label is not None:
+            label.clear_updaters()
+            label.set_value(1.0)
+
+    def hand_to(self, target, *extra):
+        """Переставить робота «рукой» в позу target (сдвиг и поворот вместе, колеса не крутятся) — с одной
+        скоростью для всех сцен (hand_time); extra — анимации на это же время (смена подписи)."""
+        a = self.end_pose()
+        dpsi = (target[2] - a[2] + np.pi) % (2 * np.pi) - np.pi
+        t = hand_time(a, target)
+        self.switch(model.move(self.track, a, (target[0], target[1], a[2] + dpsi), t, roll=False,
+                               geom=self.geom, sensor=self.sensor))
+        self.advance(t, *extra, speed=HAND)
 
     def return_to(self, target, t_slide=1.0, t_turn=1.0, together=False):
         """Возврат между прогонами: линия подъезжает так, что середина оси встает в target[:2] (колеса не крутятся),
@@ -204,6 +299,63 @@ class RunSeries(PIDScene):
                                     motor=Motor()))
             self.advance(self.traj.t[-1], readout.opacity.animate.set_value(0.35))
             self.end_block()
+
+
+class MotionRunSeries(RunSeries):
+    """Серия прогонов регулятора (ПИД) по подсценам: прогон + докатывание после motors(0, 0) — MOTION секунд видео.
+    Потерявший линию робот едет дальше. Между прогонами робота возвращают «рукой» (hand_to), кривые гаснут
+    и подпись меняется в это же время — сверх MOTION.
+
+        runs = [(dict(kp=0.1, kd=1.0, ki=0.002), "подпись"), ...]   # одно число — только P (kd = 0)
+        runs = [(..., "подпись", "новая формула", [цвета частей])]  # третий и четвертый — смена формулы
+    """
+    t_on = 0.4            # строка ШИМ снова яркая
+
+    def controller(self, ctrl):
+        kw = {"kp": ctrl, "kd": 0.0} if np.isscalar(ctrl) else dict(ctrl)
+        extra = {k: kw.pop(k) for k in ("ki",) if k in kw}
+        return Controller(**kw), extra
+
+    def simulate(self, pose, ctrl, t_end):
+        c, extra = self.controller(ctrl)
+        return model.cached_simulate(self.track, tuple(float(v) for v in pose), ctrl=c, t_end=round(t_end, 3),
+                                     sensor=self.sensor, motor=Motor(), lost_dist=np.inf, **extra)
+
+    def brake(self, run):
+        return model.brake(self.track, run, geom=self.geom, sensor=self.sensor, motor=Motor())
+
+    def plan(self):
+        """Прогоны всех подсцен заранее: шкала времени графика — по самому длинному."""
+        return [model.fit_run(lambda t, i=i: self.simulate(self.start(i), run[0], t), self.brake,
+                              MOTION * self.speed)[0] for i, run in enumerate(self.runs)]
+
+    def panel(self, t_max):
+        return GraphPanel(self.fr, self.st, self.phrase, self.runs[0][1], self.y, t_max, np.arange(0, t_max, 0.5),
+                          self.signals, readout=dict(signs=model.wheel_signs(Motor()), law=self.law),
+                          formula=self.formula, formula_colors=self.formula_colors)
+
+    def construct(self):
+        self.track = self.make_track()
+        runs = self.plan()
+        panel = self.panel(max(r.t[-1] for r in runs) * 1.06)
+        self.show(self.track, runs[0], items=[panel.readout])
+        self.add(panel)
+        self.play(panel.intro(), run_time=0.8)
+        readout, curves = panel.readout, None
+        for i, ((ctrl, caption, *text), run) in enumerate(zip(self.runs, runs)):   # прогон — подсцена
+            if i > 0:
+                self.hand_to(self.start(i), FadeOut(curves), panel.set_text(*text, caption=caption))
+                self.switch(run)
+                self.play(readout.opacity.animate.set_value(1.0), run_time=self.t_on)
+            self.begin_segment()
+            clock = RunClock(self.t)
+            curves = panel.curves(self.traj, clock)
+            self.add(curves)
+            self.advance(self.traj.t[-1])
+            clock.stop()
+            self.switch(self.brake(self.traj))
+            self.advance(self.traj.t[-1], readout.opacity.animate.set_value(0.35))
+            self.end_segment()
 
 
 class RunClock:

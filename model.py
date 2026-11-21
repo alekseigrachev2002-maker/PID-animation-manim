@@ -2,6 +2,9 @@
 
 Поза: (x, y, psi), psi — курс от +y против часовой (psi > 0 — повернут влево).
 Регулятор дискретный (ZOH между тиками), робот непрерывный: solve_ivp от тика до тика.
+Регулятор — ПИД, как в скетчах (шаг delay(10), dt в коде нет): integral = integral + err,
+control = kp·err + kd·(err − errOld) + ki·integral; ki = 0 — ПД олимпиадного курса.
+Дальномер (урок 4 нового курса): sonar_distance — расстояние до кубиков трассы в луче.
 """
 import hashlib
 import inspect
@@ -13,9 +16,10 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.special import erf
 
-from params import Controller, Geometry, Motor, Sensor
+from params import Controller, Geometry, Motor, Sensor, Sonar
 
 GRID = 0.001          # шаг непрерывной траектории, с
+TICK_FIELDS = ("tt", "L", "R", "e", "uP", "uD", "pwmL", "pwmR", "uI", "integral")   # поля Trajectory по тикам
 CACHE = Path(__file__).parent / ".cache"
 
 
@@ -162,6 +166,8 @@ class Trajectory:
     uD: np.ndarray
     pwmL: np.ndarray
     pwmR: np.ndarray
+    uI: np.ndarray       # ki · integral
+    integral: np.ndarray # сумма err
     lost_at: float = np.nan   # время схода с линии (nan — не сошел)
 
     def at(self, t):
@@ -181,7 +187,7 @@ class Trajectory:
     def signals_at(self, t):
         """Значения регулятора, действующие в момент t (ZOH)."""
         i = np.clip(np.searchsorted(self.tt, t, side="right") - 1, 0, len(self.tt) - 1)
-        return {k: getattr(self, k)[i] for k in ("L", "R", "e", "uP", "uD", "pwmL", "pwmR")}
+        return {k: getattr(self, k)[i] for k in TICK_FIELDS[1:]}
 
     def save(self, path):
         np.savez(path, **{f.name: getattr(self, f.name) for f in fields(self)})
@@ -209,35 +215,46 @@ def _wheel_step(s, moving, cmd, t0, dt, motor: Motor, geom: Geometry):
 
 
 def simulate(track, pose0, ctrl=Controller(), t_end=5.0, geom=Geometry(), sensor=Sensor(),
-             motor=Motor(), v0=0.0, seed=0, lost_dist=100.0, stop_below=None):
-    """Езда по трассе. v0 — начальная скорость колес (по умолчанию робот стоит и трогается сам).
+             motor=Motor(), v0=0.0, seed=0, lost_dist=100.0, stop_below=None, ki=0.0, stop_at=1):
+    """Езда по трассе регулятором ПИД (ki = 0 — ПД). v0 — начальная скорость колес (по умолчанию робот стоит).
 
-    Останавливается, если середина оси дальше lost_dist от всех линий.
-    stop_below — порог перекрестка: на тике, где L и R оба ниже него, регулятор не вызывается и траектория
-    кончается (как в скетче: if (L < порог && R < порог) motors(0, 0); else followLine();) — дальше brake().
+    Останавливается, если середина оси дальше lost_dist от всех линий (lost_dist = np.inf — потерявший линию
+    робот едет дальше).
+    stop_below — порог перекрестка: L и R оба ниже — перекресток; счет по фронту, как в уроке 3. На stop_at-м
+    перекрестке регулятор не вызывается и траектория кончается (как в скетче: if (перекресток) motors(0, 0);
+    else followLine();) — дальше brake(); прошлые перекрестки робот проезжает. Перекресток, на котором робот
+    стоит на старте, не считается.
     """
     rng = np.random.default_rng(seed)
     s = np.array([*pose0, v0, v0, 0.0, 0.0])
     moving = [v0 != 0, v0 != 0]
     cont, ticks = [], []
-    e_old, lost_at = None, np.nan
+    e_old, integral, lost_at = None, 0.0, np.nan
+    count, was = 0, None
     # команды, отданные до старта: стоящему роботу — нули, едущему — прямо
     prior = (ctrl.speed, ctrl.speed) if v0 else (0.0, 0.0)
     lag = deque([prior] * int(round(motor.delay / ctrl.period)))
     for k in range(int(round(t_end / ctrl.period))):
         t0 = k * ctrl.period
         L, R = to_channels(read_sensors(track, s[:3], geom, sensor, rng), sensor)
-        if stop_below is not None and L < stop_below and R < stop_below:
-            break
+        if stop_below is not None:
+            cross = L < stop_below and R < stop_below
+            was = cross if was is None else was          # стоит на перекрестке на старте — он не в счет
+            count += cross and not was
+            was = cross
+            if cross and count >= stop_at:
+                break
         e = error(L, R, ctrl)
         e_old = e if e_old is None else e_old   # без рывка D на первом тике
+        integral = integral + e
         uP, uD = control_parts(e, e_old, ctrl)
-        pL, pR = wheel_pwm(uP + uD, ctrl, motor)
+        uI = ki * integral
+        pL, pR = wheel_pwm(uP + uD + uI, ctrl, motor)
         e_old = e
         s, moving, chunk = _wheel_step(s, moving, delayed(lag, (pL, pR)), t0, ctrl.period, motor, geom)
         cont.append(chunk)
-        ticks.append((t0, L, R, e, uP, uD, pL, pR))
-        if min(d.min() for d in track.distances(s[None, :2])) > lost_dist:
+        ticks.append((t0, L, R, e, uP, uD, pL, pR, uI, integral))
+        if np.isfinite(lost_dist) and min(d.min() for d in track.distances(s[None, :2])) > lost_dist:
             lost_at = t0 + ctrl.period
             break
     return _pack(np.hstack(cont), np.array(ticks), lost_at)
@@ -263,7 +280,7 @@ def _commanded(track, s, moving, cmd, t_on, ctrl, geom, sensor, motor, stop=Fals
         L, R = to_channels(read_sensors(track, s[:3], geom, sensor), sensor)
         s, moving, chunk = _wheel_step(s, moving, delayed(lag, c), t0, ctrl.period, motor, geom)
         cont.append(chunk)
-        ticks.append((t0, L, R, error(L, R, ctrl), 0.0, 0.0, *c))
+        ticks.append((t0, L, R, error(L, R, ctrl), 0.0, 0.0, *c, 0.0, 0.0))
         if not on and not any(moving):
             break
         if t0 > t_on + t_guard:
@@ -335,7 +352,7 @@ def prescribed(track, t, x, y, psi, geom=Geometry(), sensor=Sensor(), ctrl=Contr
     turn = geom.track_width / 2 * (psi - psi[0])
     z = np.zeros_like(t)
     cont = np.vstack([t, x, y, psi, z, z, ds - turn, ds + turn])
-    ticks = np.column_stack([t, LR[:, 0], LR[:, 1], e, z, z, z, z])
+    ticks = np.column_stack([t, LR[:, 0], LR[:, 1], e, z, z, z, z, z, z])
     return _pack(cont, ticks, np.nan)
 
 
@@ -354,7 +371,7 @@ def chain(*trajs):
         out["sL"].append(tr.sL[skip:] - tr.sL[0] + s0[0])
         out["sR"].append(tr.sR[skip:] - tr.sR[0] + s0[1])
         out["tt"].append(tr.tt + t0)
-        for k in ("L", "R", "e", "uP", "uD", "pwmL", "pwmR"):
+        for k in TICK_FIELDS[1:]:
             out[k].append(getattr(tr, k))
         t0, s0 = out["t"][-1][-1], np.array([out["sL"][-1][-1], out["sR"][-1][-1]])
     return Trajectory(**{k: np.concatenate(v) for k, v in out.items()})
@@ -362,8 +379,62 @@ def chain(*trajs):
 
 def _pack(cont, ticks, lost_at):
     c = dict(zip(("t", "x", "y", "psi", "vL", "vR", "sL", "sR"), cont))
-    k = dict(zip(("tt", "L", "R", "e", "uP", "uD", "pwmL", "pwmR"), ticks.T))
+    k = dict(zip(TICK_FIELDS, ticks.T))
     return Trajectory(**c, **k, lost_at=lost_at)
+
+
+# ---------- дальномер ----------
+
+def block_hit(block, origin, heading, half_deg):
+    """Расстояние от origin по курсу heading (рад, как ψ) до кубика block (center, side), если его ближний край
+    внутри луча ±half_deg; иначе None."""
+    d = np.asarray(block.center, float) - np.asarray(origin, float)
+    fwd = np.array([-np.sin(heading), np.cos(heading)])
+    along = d @ fwd
+    if along <= 0:
+        return None
+    off = abs(d @ np.array([np.cos(heading), np.sin(heading)]))
+    if off - block.side / 2 > along * np.tan(np.radians(half_deg)):
+        return None
+    return float(along - block.side / 2)
+
+
+def sonar_distance(pose, blocks, sonar=Sonar(), max_mm=600.0):
+    """Что покажет дальномер в позе pose = (x, y, ψ): расстояние от излучателей до ближнего кубика (track.blocks)
+    в луче ±beam_deg, мм; кубика в луче нет — max_mm."""
+    x, y, psi = pose
+    o = np.array([x, y]) + np.array([-np.sin(psi), np.cos(psi)]) * sonar.front
+    hits = [d for b in blocks if (d := block_hit(b, o, psi, sonar.beam_deg)) is not None]
+    return min(hits + [max_mm])
+
+
+# ---------- подбор ----------
+
+def bisect(done, lo, hi, n=30):
+    """Наименьшее x в [lo, hi], при котором done(x) истинно (done монотонна): подбор времени команды, угла."""
+    for _ in range(n):
+        mid = (lo + hi) / 2
+        lo, hi = (lo, mid) if done(mid) else (mid, hi)
+    return (lo + hi) / 2
+
+
+def fit_run(sim, stop, target):
+    """Прогон run = sim(t_end), который вместе с докатыванием stop(run) длится target секунд модели
+    (подстройка t_end по перебору/недобору, до 6 шагов). Возвращает (run, stop(run))."""
+    t_end = target - 0.25
+    for _ in range(6):
+        run = sim(round(t_end, 3))
+        tail = stop(run)
+        over = run.t[-1] + tail.t[-1] - target
+        if abs(over) <= 0.01:
+            break
+        t_end -= over + 0.005
+    return run, tail
+
+
+def end_pose(traj):
+    """Последняя поза траектории (x, y, ψ)."""
+    return float(traj.x[-1]), float(traj.y[-1]), float(traj.psi[-1])
 
 
 # ---------- кэш ----------

@@ -18,26 +18,28 @@
 (Nano4aFull: трек и робот на весь кадр, подпись шага сверху слева). Классы для Manim — циклом по VERSIONS
 и видам: Nano4aLeft, Nano4aLeftFull, Nano4aRight, …
 
-Простая езда по линии ускорена до FAST раз (nano_base) с плавным переходом; не ускоряются старт, подъезд к X,
+Простая езда по линии ускорена до FAST раз (атрибут сцены fast, движок) с плавным переходом; не ускоряются старт, подъезд к X,
 сканирование и решение, начало после решения, подъезд к финишу. Кратность — справа вверху.
 Кубик — центр на линии ветки в CUBE_DIST от X по прямой; грань, на которую смотрит датчик, перпендикулярна линии
 в центре кубика. Выбросы uD (D отвечает на скачок err, когда датчик въезжает на поперечную линию) — как есть,
 за пределами шкалы кривые обрезаны краем графика.
 """
-from nano_base import I_COLOR, NanoScene, RateLabel, RunClock, bisect, path_time, render  # первым: путь к корню
+from nano_base import NanoScene, render  # первым: добавляет в путь корень репозитория
 
 from dataclasses import dataclass
 
 import numpy as np
-from manim import LEFT, UP, FadeIn, FadeOut, Line, Rectangle, RoundedRectangle, ValueTracker, VGroup, config
+from manim import LEFT, UP, FadeIn, FadeOut, Line, RoundedRectangle, ValueTracker, VGroup
 
 import model
-import nano_model
-from nano_robot import Cube, SonarRobot, sonar_distance
+from model import bisect, end_pose, sonar_distance
 from nano_track import S_FINISH_OUTER, S_X_IN, S_X_OTHER, ShortTrack
 from params import Controller, Geometry, Layout, Motor
+from scenes.base import RunClock, path_time
+from track import Block
 from visuals.layout import Frame, Z_UI, on_baseline, pick_font, text
-from visuals.panel import GraphPanel, Signal, row_baseline
+from visuals.panel import GraphPanel, RateLabel, Signal, row_baseline
+from visuals.robot import SonarRobot
 
 START = S_FINISH_OUTER + Geometry().sensor_y + 25.0   # верхняя внешняя прямая: датчики уже за линией старт/финиш
 CUBE_DIST = 200.0     # от X до центра кубика по прямой
@@ -52,16 +54,15 @@ SCAN_DEG = 90.0       # сканирование: на столько граду
 BRANCH_DEG = 60.0     # поворот на ветку: регулятор подхватывает ее линию с 40–70°, с 80–90° робот линию теряет
 MAX_CM = 60           # верх шкалы dist: «кубика нет»
 U_RANGE = (-150, 300)
-LAV = "#A78BFA"       # control — сумма
-CYAN = "#22D3EE"      # dist
+FAST = 3.0            # ускорение простой езды по линии (максимум); 1,0 — без ускорения
 PWM_TURN = 150
 SLOW_START = 500.0    # без ускорения: первые мм после старта
 SLOW_END = 400.0      # без ускорения: последние мм перед стопом
 SLOW_AFTER = 300.0    # без ускорения: первые мм после решения
-U_SIGNALS = [Signal("uP", "cP", "e"), Signal("uD", "cD", "D"), Signal("uI", "cI", I_COLOR), Signal("control", "cU", LAV, 4.0)]
-DIST = Signal("dist, см", "dist", CYAN)
-U_FORMULA = ("control = uP + uD + uI", [("control", LAV), ("uP", "e"), ("uD", "D"), ("uI", I_COLOR)])
-D_FORMULA = (f"dist < {LIMIT_CM}", [("dist", CYAN)])
+U_SIGNALS = [Signal("uP", "cP", "e"), Signal("uD", "cD", "D"), Signal("uI", "cI", "I"), Signal("control", "cU", "u", 4.0)]
+DIST = Signal("dist, см", "dist", "dist")
+U_FORMULA = ("control = uP + uD + uI", [("control", "u"), ("uP", "e"), ("uD", "D"), ("uI", "I")])
+D_FORMULA = (f"dist < {LIMIT_CM}", [("dist", "dist")])
 SIDE = {+1: "налево", -1: "направо", 0: "прямо"}
 FINISH_AT = {+1: 1, -1: 3, 0: 1}   # куда поехал робот → номер финишного перекрестка по маршруту (см. докстринг)
 
@@ -101,10 +102,6 @@ def cube_pose(track, side):
     return np.array(track.route.pose_at(s)[:2]), float(np.arctan2(-(bx - ax), by - ay))
 
 
-def end_pose(tr):
-    return float(tr.x[-1]), float(tr.y[-1]), float(tr.psi[-1])
-
-
 def with_display(run):
     """Кривые для графика: control = uP + uD + uI; значения обрезаны чуть за краем шкалы (дальше — край графика)."""
     lo, hi = U_RANGE
@@ -123,6 +120,7 @@ class Nano4a(NanoScene):
     """Сюжет сцены для кубика self.cube (CubeSpec или None): траектории и шаги с подписями. Как показывать —
     в видах Nano4aGraph и Nano4aFull (методы ui_*)."""
     robot_cls = SonarRobot
+    fast = FAST
     cube = None
     t_swap = 0.8          # смена вида между подсценами, с
 
@@ -164,8 +162,8 @@ class Nano4a(NanoScene):
         return self.drive(pose, pwm, t)
 
     def pid_run(self, pose, stop_at):
-        run = nano_model.cached_simulate(self.track, tuple(map(float, pose)), ctrl=Controller(**PID), ki=KI,
-                                         t_end=60.0, stop_below=THRESHOLD, stop_at=stop_at)
+        run = model.cached_simulate(self.track, tuple(map(float, pose)), ctrl=Controller(**PID), ki=KI, t_end=60.0,
+                                    sensor=self.sensor, motor=Motor(), stop_below=THRESHOLD, stop_at=stop_at)
         return with_display(run), model.brake(self.track, run, geom=self.geom, sensor=self.sensor, motor=Motor())
 
     def plan(self):
@@ -187,22 +185,18 @@ class Nano4a(NanoScene):
 
     def dist_of(self, seg):
         """Что показывает дальномер на тиках отрезка, см (кубика нет в луче — MAX_CM)."""
-        cubes = [(self.cube_spec[0], CUBE_SIDE)] if self.cube_spec else []
         xs, ys, ps = (np.interp(seg.tt, seg.t, getattr(seg, k)) for k in ("x", "y", "psi"))
-        return np.array([min(sonar_distance((x, y, a), cubes), MAX_CM * 10) / 10 for x, y, a in zip(xs, ys, ps)])
+        return np.array([min(sonar_distance((x, y, a), self.track.blocks), MAX_CM * 10) / 10
+                         for x, y, a in zip(xs, ys, ps)])
 
     # ---------- сцена ----------
 
     def setup(self):
         super().setup()
         self.track = ShortTrack()
-        self.cube_spec = cube_pose(self.track, self.cube_side) if self.cube else None
-
-    def field_items(self, view):
-        if not self.cube_spec:
-            return []
-        center, angle = self.cube_spec
-        return [Cube(view, center, CUBE_SIDE, angle, *self.cube.color)]
+        if self.cube:                                                   # кубик — предмет поля (track.blocks)
+            center, angle = cube_pose(self.track, self.cube_side)
+            self.track.blocks = [Block(tuple(center), CUBE_SIDE, angle, *self.cube.color)]
 
     def construct(self):
         p = self.plan()
@@ -336,12 +330,7 @@ class Nano4aGraph(Nano4a):
 
 class Nano4aFull(Nano4a):
     """Вид 16:9 без графика: трек и робот на весь кадр, подпись шага сверху слева, кратность — справа вверху."""
-
-    def setup(self):
-        super().setup()
-        self.remove(*self.mobjects)                                       # без темной панели графиков
-        self.add(Rectangle(width=config.frame_width, height=config.frame_height, fill_color=self.st.field,
-                           fill_opacity=1, stroke_width=0).set_z_index(-10))
+    panel_bg = False                                                       # без темной панели графиков
 
     def step(self, s):
         """Подпись шага: белый текст на темной плашке сверху слева (как блок формулы)."""

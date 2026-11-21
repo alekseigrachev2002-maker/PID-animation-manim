@@ -6,12 +6,14 @@
 эталон «прямо». Маневр — 8 с движения (MOTION): разгон — подобрано время роста ШИМ, дуга — время команды;
 оборот — ровно 360°, сколько займет. Смена подписи — сверх 8 с.
 """
-from nano_base import MOTION, NanoScene, RunClock, bisect, render  # первым: добавляет в путь корень репозитория
+from nano_base import NanoScene, render  # первым: добавляет в путь корень репозитория
 
 import numpy as np
 from manim import FadeOut
 
 import model
+from model import bisect
+from scenes.base import MOTION, RunClock
 from nano_track import ShortTrack
 from visuals.panel import GraphPanel, Signal
 

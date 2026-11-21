@@ -20,7 +20,7 @@ from manim import (LEFT, RIGHT, UP, AnimationGroup, DashedLine, Dot, FadeIn, Fad
                    Succession, ValueTracker, VGroup, VMobject)
 
 from params import Style
-from visuals.layout import Z_UI, on_baseline, pick_font, text
+from visuals.layout import Z_UI, baseline, on_baseline, pick_font, text
 
 ORIGIN_PT = np.zeros(3)
 
@@ -343,6 +343,43 @@ class MotorReadout(VGroup):
         op = self.opacity.get_value()
         self.texts.set_opacity(op)
         self.numbers.set_fill(opacity=op)
+        return self
+
+
+# ---------- пометка ускорения ----------
+
+class RateLabel(VGroup):
+    """Пометка ускорения «×3,0» на строке заголовка, правый край — right_px (по умолчанию край панели графиков):
+    текущая кратность, один знак после запятой; при ×1,0 гаснет. Слоты под символы — как Number."""
+    SLOTS = 5
+
+    def __init__(self, fr, st=Style(), right_px=None):
+        super().__init__(*[VMobject(fill_color=st.muted, fill_opacity=1, stroke_width=0) for _ in range(self.SLOTS)])
+        self.fr, self.st, self.cache = fr, st, {}
+        right_px = fr.layout.graph_w_px - fr.layout.margin_px if right_px is None else right_px
+        self.right = fr.px(right_px, 0)[0]
+        ref = text(fr, "Кубик", st.title_px, st.text, st, weight=st.title_weight)
+        ref.move_to(fr.px(fr.layout.margin_px, fr.layout.header_y_px), aligned_edge=LEFT)
+        self.base = baseline(ref)                     # линия шрифта заголовка
+        self.set_z_index(Z_UI)
+        self.set_value(1.0)
+
+    def _glyphs(self, s):
+        if s not in self.cache:
+            t = text(self.fr, s, self.st.text_px, self.st.muted, self.st)
+            ref = np.array([t.get_right()[0], baseline(t), 0.0])
+            self.cache[s] = [g.points - ref for g in t]
+        return self.cache[s]
+
+    def set_value(self, k):
+        glyphs = self._glyphs(f"×{k:.1f}".replace(".", ","))
+        anchor = np.array([self.right, self.base, 0.0])
+        for j, slot in enumerate(self):
+            if j < len(glyphs):
+                slot.set_points(glyphs[j] + anchor)
+            else:
+                slot.clear_points()
+        self.set_fill(opacity=float(np.clip((k - 1.0) / 0.15, 0, 1)))
         return self
 
 

@@ -4,13 +4,14 @@
 пересекаются две кривые линии — и проезжает его. График — L и R с порогом 300: на перекрестке оба ниже порога.
 Камера повернута: на старте робот едет вверх.
 """
-from nano_base import MOTION, NanoScene, RunClock, fit_run, render  # первым: добавляет в путь корень репозитория
+from nano_base import NanoScene, render  # первым: добавляет в путь корень репозитория
 
 import numpy as np
 from manim import ValueTracker
 
 import model
-import nano_model
+from model import fit_run
+from scenes.base import MOTION, RunClock
 from n3a_i_offset import PD
 from nano_track import S_X_IN, ShortTrack
 from params import Controller, Motor
@@ -23,7 +24,8 @@ INTRO = 0.8
 class Nano3b(NanoScene):
     def runs(self, track):
         """Прогон и докатывание — MOTION = 8 с видео."""
-        return fit_run(lambda t: nano_model.cached_simulate(track, track.pose_at(START), ctrl=Controller(**PD), t_end=t),
+        return fit_run(lambda t: model.cached_simulate(track, track.pose_at(START), ctrl=Controller(**PD), t_end=t,
+                                                       sensor=self.sensor),
                        lambda run: model.brake(track, run, geom=self.geom, sensor=self.sensor, motor=Motor()),
                        MOTION * self.speed)
 

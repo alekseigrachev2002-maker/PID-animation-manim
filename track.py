@@ -10,6 +10,8 @@
 
 Внутри осевая — ломаная с шагом 0.5 мм; радиус поворота существует только при построении.
 """
+from dataclasses import dataclass
+
 import numpy as np
 from scipy.spatial import cKDTree
 
@@ -113,15 +115,29 @@ def _seg_dist(p, a, b):
     return np.linalg.norm(p - (a + t[:, None] * ab), axis=1)
 
 
+@dataclass(frozen=True)
+class Block:
+    """Кубик на поле (вид сверху): центр (мм), сторона (мм), поворот (рад), заливка и контур. Датчики линии его
+    не видят, дальномер — видит (model.sonar_distance)."""
+    center: tuple
+    side: float = 50.0
+    angle: float = 0.0
+    color: str = "#22C55E"
+    edge: str = "#166534"
+
+
 class Track:
     """Трасса — набор линий. Принимает Route (собирается здесь) или готовые Line.
 
-    squares — разметка поля без влияния на датчики: квадраты (x0, y0, x1, y1), мм.
+    Разметка и предметы без влияния на датчики линии:
+    squares — квадраты (x0, y0, x1, y1), мм; discs — черные круги ((x, y), r), мм; blocks — кубики (Block).
     """
 
-    def __init__(self, *items, squares=()):
+    def __init__(self, *items, squares=(), discs=(), blocks=()):
         self.lines = [Line(np.array(it.pts), it.marks) if isinstance(it, Route) else it for it in items]
         self.squares = list(squares)
+        self.discs = list(discs)
+        self.blocks = list(blocks)
 
     def distances(self, p) -> list:
         return [ln.distance(p) for ln in self.lines]

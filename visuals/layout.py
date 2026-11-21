@@ -91,9 +91,12 @@ def on_baseline(t, y):
     return t.shift((y - baseline(t)) * UP)
 
 
-def backdrop(fr, st=Style()):
+def backdrop(fr, st=Style(), panel=True):
+    """Фон кадра: поле на весь кадр и (panel=True) темная панель графиков слева."""
     field = Rectangle(width=config.frame_width, height=config.frame_height, fill_color=st.field,
                       fill_opacity=1, stroke_width=0).set_z_index(-10)
+    if not panel:
+        return VGroup(field)
     w = fr.layout.graph_w_px * fr.unit
     panel = Rectangle(width=w, height=config.frame_height, fill_color=st.graph_bg, fill_opacity=1,
                       stroke_width=0).move_to(fr.px(fr.layout.graph_w_px / 2, fr.height_px / 2))

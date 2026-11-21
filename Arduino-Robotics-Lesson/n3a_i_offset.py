@@ -4,7 +4,7 @@
 смещением: чтобы поворачивать, нужен постоянный control, а его дает только постоянная ошибка — err стоит
 полкой около +210, uP ≈ +42. И копит ошибку: uI растет, берет поворот на себя, uP и err уходят к нулю.
 """
-from nano_base import I_COLOR, NanoRunSeries, render
+from nano_base import NanoRunSeries, render
 from nano_track import ShortTrack
 from visuals.panel import Signal
 
@@ -16,8 +16,8 @@ KI = 0.004
 class Nano3a(NanoRunSeries):
     phrase = "Вводим I"
     formula = "control = uP + uD + integral * ki"
-    formula_colors = [("uP", "e"), ("uD", "D"), ("integral * ki", I_COLOR)]
-    signals = [Signal("uP = err * kp", "uP", "e"), Signal("uI = integral * ki", "uI", I_COLOR)]
+    formula_colors = [("uP", "e"), ("uD", "D"), ("integral * ki", "I")]
+    signals = [Signal("uP = err * kp", "uP", "e"), Signal("uI = integral * ki", "uI", "I")]
     y = ("u", -50, 150)
     runs = [
         (dict(PD, ki=0.0), "ki = 0: err ≈ 210"),
