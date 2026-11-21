@@ -65,7 +65,7 @@ U_FORMULA = ("control = uP + uD + uI", [("control", "u"), ("uP", "e"), ("uD", "D
 D_FORMULA = (f"dist < {LIMIT_CM}", [("dist", "dist")])
 SIDE = {+1: "налево", -1: "направо", 0: "прямо"}
 FINISH_AT = {+1: 1, -1: 3, 0: 1}   # куда поехал робот → номер финишного перекрестка по маршруту (см. докстринг)
-TITLE = "Кубик на перекрестке"
+TITLE = "Куда повернуть?"   # один для всех версий: пояснение в шапке 16:9 всегда начинается с одного места
 
 
 @dataclass(frozen=True)
@@ -147,8 +147,14 @@ class Nano4a(NanoScene):
 
     def decision(self):
         if not self.cube:
-            return "кубика нет — прямо"
-        return f"кубик {'слева' if self.cube_side > 0 else 'справа'} — {SIDE[self.go_side]}"
+            return "кубика нет — едем прямо"
+        return f"кубик {'слева' if self.cube_side > 0 else 'справа'} — едем {SIDE[self.go_side]}"
+
+    def look_result(self, seg2, t0, t1):
+        """Итог одного взгляда: самый короткий dist за поворот — кубик (см) или «кубика нет»."""
+        m = (seg2.tt >= t0) & (seg2.tt <= t1)
+        d = float(seg2.dist[m].min())
+        return f"кубик, {d:.0f} см" if d < LIMIT_CM else "кубика нет"
 
     # ---------- траектория ----------
 
@@ -205,7 +211,7 @@ class Nano4a(NanoScene):
         seg2 = model.chain(p["look1"], p["look2"], p["go"])
         seg2.dist = self.dist_of(seg2)
         seg3 = model.chain(p["run3"], p["stop3"])
-        self.ui_open(p, seg1, "едем до перекрестка")
+        self.ui_open(p, seg1, "едем к перекрестку")
 
         # 1: по линии до X — одна остановка
         run1 = p["run1"]
@@ -223,7 +229,9 @@ class Nano4a(NanoScene):
         t1 = p["look1"].t[-1]
         t2 = t1 + p["look2"].t[-1]
         self.advance(t1)
+        self.play(*self.ui_caption(f"смотрим {SIDE[p['first']]} — {self.look_result(seg2, 0.0, t1)}"), run_time=0.8)
         self.advance(t2, *self.ui_caption(f"смотрим {SIDE[p['second']]}"))
+        self.play(*self.ui_caption(f"смотрим {SIDE[p['second']]} — {self.look_result(seg2, t1, t2)}"), run_time=0.8)
         self.play(*self.ui_caption(self.decision()), run_time=0.8)
         self.advance(seg2.t[-1])
         self.ui_freeze()
@@ -231,13 +239,13 @@ class Nano4a(NanoScene):
 
         # 3: по линии до финиша
         run3 = p["run3"]
-        self.play(*self.ui_phase(3, run3, "к финишу"), run_time=self.t_swap)
+        self.play(*self.ui_phase(3, run3, "едем к финишу"), run_time=self.t_swap)
         self.switch(seg3)
         self.ui_curves(run3)
         self.begin_segment()
         self.advance_fast(run3.t[-1], self.zones(run3, SLOW_AFTER))
         self.ui_freeze()
-        self.advance(seg3.t[-1], *self.ui_caption(f"стоп на {self.stop_at}-м перекрестке"))
+        self.advance(seg3.t[-1], *self.ui_caption(f"финиш — стоп на {self.stop_at}-м перекрестке"))
         self.end_segment(check=False)
         self.wait(0.5, frozen_frame=False)
 
@@ -335,9 +343,10 @@ class Nano4aFull(Nano4a):
     panel_bg = False                                                       # без темной панели графиков
 
     def ui_open(self, p, seg1, caption):
-        self.show(self.track, seg1, anchor_px=(640.0, 430.0))           # робот ниже середины: впереди место
+        self.show(self.track, seg1, anchor_px=(640.0, 420.0))           # робот ниже середины: впереди место
         self.bar = TitleBar(self.fr, TITLE, caption, self.st)
-        self.rate = RateLabel(self.fr, self.st, right_px=self.fr.layout.width_px - self.fr.layout.margin_px)
+        self.rate = RateLabel(self.fr, self.st, right_px=self.fr.layout.width_px - self.fr.layout.margin_px,
+                              color=self.st.text)
         self.add(self.bar, self.rate)
         self.play(self.bar.intro(), run_time=0.8)
 

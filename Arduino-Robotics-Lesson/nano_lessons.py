@@ -28,13 +28,14 @@ KEYS = [
     (Nano1a, 3, -END, "scene-1a-motion"),       # дуга влево: правое колесо быстрее
     (Nano2a, 2, -5.2, "scene-2a-error"),        # второй проход: err на плато ≈ −700
     (Nano2b, 3, -END, "scene-2b-p"),            # kp = 0,3: в повороте
-    (Nano2c, 2, -END, "scene-2c-d"),            # kd = 1: вписался
+    (Nano2c, 2, -END, "scene-2c-d"),            # kd = 1: едет
     (Nano3a, 2, -END, "scene-3a-i-offset"),     # с И: uI взял поворот на себя
     (Nano3b, 1, -END, "scene-3b-cross"),        # перекресток X позади
 ] + [
-    # 4a: каждая версия в двух видах; с графиком — конец (стоп на финише), без графика — решение на X
-    (cls, 2 if full else 3, -END, FILES[name] + ("-full" if full else ""))
-    for (name, full), cls in SCENES.items()
+    # 4a: в курс идет вид 16:9 (без графика), кадр — конец сканирования (решение на X); вид с графиком (SCENES с
+    # full = False) остается в коде и рендерится отдельно, если понадобится
+    (cls, 2, -END, FILES[name])
+    for (name, full), cls in SCENES.items() if full
 ]
 
 

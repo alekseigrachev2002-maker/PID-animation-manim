@@ -147,32 +147,44 @@ class Header(VGroup):
         return [self._swap("phrase", self._phrase(phrase)), self.set_caption(caption)]
 
 
-class WideHeader(Header):
-    """Header без панели графиков: пояснение может идти до правого края кадра."""
+class TitleHeader(Header):
+    """Шапка в одну строку для полосы TitleBar: заголовок — на месте заголовка остальных сцен (тот же отступ слева
+    и сверху), пояснение — сразу правее заголовка, на его линии шрифта. Заголовок у версий одной сцены одинаковый,
+    поэтому левый край пояснения постоянный. Смена пояснения — swap, как в Header."""
+    GAP_PX = 28.0          # от заголовка до пояснения
+    RIGHT_PX = 110.0       # справа оставить место под пометку ускорения «×k»
+
+    def _caption_x(self):
+        return self.phrase.get_right()[0] + self.GAP_PX * self.fr.unit
+
+    def _caption(self, s):
+        t = text(self.fr, s, self.st.text_px, self.st.muted, self.st)
+        t.move_to([self._caption_x(), 0, 0], aligned_edge=LEFT)
+        return on_baseline(t, baseline(self.phrase)).set_z_index(Z_UI)
 
     def _check_fit(self):
         fr = self.fr
-        if self.caption.get_right()[0] > fr.px(fr.layout.width_px - fr.layout.margin_px, 0)[0]:
-            warnings.warn(f"шапка: пояснение «{self.caption_text}» не помещается в кадр — сократите текст")
+        if self.caption.get_right()[0] > fr.px(fr.layout.width_px - fr.layout.margin_px - self.RIGHT_PX, 0)[0]:
+            warnings.warn(f"шапка: пояснение «{self.caption_text}» не помещается в строку — сократите текст")
 
 
 class TitleBar(VGroup):
     """Шапка-полоса на всю ширину кадра — для сцен без панели графиков (вид 16:9, panel_bg = False).
 
-    Темная полоса цвета панели графиков высотой HEIGHT_PX; в ней заголовок и пояснение шага там же и тем же
-    шрифтом, что в шапке панели графиков (Header). intro() — заголовок выезжает слева; set_caption() — смена
-    пояснения swap (старое уходит вверх, новое появляется снизу). Пометку ускорения (RateLabel) ставить справа
-    на строке заголовка: right_px = fr.layout.width_px − fr.layout.margin_px.
+    Темная полоса цвета панели графиков; заголовок стоит там же и тем же шрифтом, что в остальных сценах, высота
+    полосы — 2 × header_y_px: отступ над заголовком равен отступу под ним. Пояснение — в той же строке правее
+    заголовка (TitleHeader). intro() — заголовок выезжает слева; set_caption() — смена пояснения swap. Пометку
+    ускорения (RateLabel) ставить справа на строке заголовка: right_px = fr.layout.width_px − fr.layout.margin_px.
     """
-    HEIGHT_PX = 140.0
 
     def __init__(self, fr, phrase, caption, st=Style()):
         super().__init__()
         self.fr, self.st = fr, st
-        self.bg = Rectangle(width=config.frame_width, height=self.HEIGHT_PX * fr.unit, stroke_width=0,
+        self.height_px = 2 * fr.layout.header_y_px
+        self.bg = Rectangle(width=config.frame_width, height=self.height_px * fr.unit, stroke_width=0,
                             fill_color=st.graph_bg, fill_opacity=1)
-        self.bg.move_to(fr.px(fr.layout.width_px / 2, self.HEIGHT_PX / 2)).set_z_index(Z_UI - 1)
-        self.header = WideHeader(fr, phrase, caption, st)
+        self.bg.move_to(fr.px(fr.layout.width_px / 2, self.height_px / 2)).set_z_index(Z_UI - 1)
+        self.header = TitleHeader(fr, phrase, caption, st)
         self.add(self.bg, self.header)
 
     def intro(self):
@@ -384,12 +396,14 @@ class MotorReadout(VGroup):
 # ---------- пометка ускорения ----------
 
 class RateLabel(VGroup):
-    """Пометка ускорения «×3,0» на строке заголовка, правый край — right_px (по умолчанию край панели графиков):
-    текущая кратность, один знак после запятой; при ×1,0 гаснет. Слоты под символы — как Number."""
+    """Пометка ускорения «×3,0» на строке заголовка, правый край — right_px (по умолчанию край панели графиков),
+    цвет — color (по умолчанию приглушенный): текущая кратность, один знак после запятой; при ×1,0 гаснет.
+    Слоты под символы — как Number."""
     SLOTS = 5
 
-    def __init__(self, fr, st=Style(), right_px=None):
-        super().__init__(*[VMobject(fill_color=st.muted, fill_opacity=1, stroke_width=0) for _ in range(self.SLOTS)])
+    def __init__(self, fr, st=Style(), right_px=None, color=None):
+        color = st.muted if color is None else color
+        super().__init__(*[VMobject(fill_color=color, fill_opacity=1, stroke_width=0) for _ in range(self.SLOTS)])
         self.fr, self.st, self.cache = fr, st, {}
         right_px = fr.layout.graph_w_px - fr.layout.margin_px if right_px is None else right_px
         self.right = fr.px(right_px, 0)[0]

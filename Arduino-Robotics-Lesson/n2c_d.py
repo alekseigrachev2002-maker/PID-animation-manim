@@ -3,6 +3,7 @@
 
 По модели с kp = 0,06 робот вписывается уже с kd = 0,5; на экране kd = 1. На длинной дуге D малый kp
 не спасает (там err почти не меняется) — поэтому место — вход в поворот с прямой.
+Пояснения короткие («kd = 0 — съезд», «kd = 1 — едет»): формула D длинная, «kp = 0,06» в строку не помещается.
 """
 from nano_base import NanoRunSeries, render
 from nano_track import ShortTrack
@@ -19,8 +20,8 @@ class Nano2c(NanoRunSeries):
     signals = [Signal("uP", "uP", "e"), Signal("uD", "uD", "D")]
     y = ("u", -100, 100)
     runs = [
-        (dict(kp=KP_ALMOST, kd=0.0), "kp = 0,06: съезд"),
-        (dict(kp=KP_ALMOST, kd=1.0), "kd = 1, вписался"),
+        (dict(kp=KP_ALMOST, kd=0.0), "kd = 0 — съезд"),
+        (dict(kp=KP_ALMOST, kd=1.0), "kd = 1 — едет"),
     ]
 
     def make_track(self):

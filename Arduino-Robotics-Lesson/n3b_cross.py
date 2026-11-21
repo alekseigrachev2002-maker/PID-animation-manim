@@ -51,7 +51,7 @@ class Nano3b(NanoScene):
         self.advance(t_in)
         self.advance(t_in + 0.8 * self.speed, panel.set_caption("оба ниже порога — перекресток"))
         self.advance(max(t_out + 1.2 * self.speed, t_in + 2.0 * self.speed))
-        self.advance(run.t[-1], panel.set_caption("едем дальше"))
+        self.advance(run.t[-1], panel.set_caption("перекресток позади — едем дальше"))
         clock.stop()
         self.switch(stop)
         self.advance(stop.t[-1])
