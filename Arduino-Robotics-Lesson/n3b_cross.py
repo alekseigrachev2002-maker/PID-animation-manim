@@ -13,7 +13,7 @@ import model
 from model import fit_run
 from scenes.base import MOTION, RunClock
 from n3a_i_offset import PD
-from nano_track import S_X_IN, ShortTrack
+from nano_track import CROSS_THRESHOLD, S_X_IN, ShortTrack
 from params import Controller, Motor
 from visuals.panel import GraphPanel, Signal
 
@@ -34,7 +34,7 @@ class Nano3b(NanoScene):
         run, stop = self.runs(track)
         self.show(track, run)
         a0, a1 = model.channel_sides(self.sensor)
-        trs = Controller().threshold
+        trs = CROSS_THRESHOLD
         t_max = run.t[-1] + stop.t[-1]
         panel = GraphPanel(self.fr, self.st, "Перекресток", "едем по линии", y=("АЦП", 0, 1023), t_max=t_max * 1.06,
                            t_ticks=np.arange(0, t_max, 0.5),

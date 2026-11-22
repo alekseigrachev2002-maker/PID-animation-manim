@@ -9,7 +9,8 @@
     left      — зеленый кубик справа → налево → по дуге R 700 и внешней петле, стоп на 1-м перекрестке;
     right     — малиновый кубик слева → направо → через внутреннюю петлю: финиш на внутренней прямой (1-й),
                 снова X (2-й), старт/финиш на внешней прямой (3-й), стоп;
-    straight  — кубика нет → прямо через X → стоп на 1-м (финиш на верхней внутренней прямой).
+    straight  — кубика нет → прямо через X → через левую и правую внутренние петли: 1-й — финиш на внутренней
+                прямой, 2-й — снова X, 3-й — старт/финиш на внешней прямой, стоп (финиш всегда там же, где старт).
 
 Сюжет (Nano4a.construct) — общий список шагов: по линии до X; на перекрестке — «задержка» до центра X: моторы еще
 DELAY секунд едут прямо (motors(speed, speed); delay(260);), затем motors(0, 0) — одна остановка, робот
@@ -36,7 +37,7 @@ from manim import UP, FadeIn, FadeOut, Line, ValueTracker, VGroup
 import model
 from model import bisect, end_pose, sonar_distance
 from n3a_i_offset import KI, PD
-from nano_track import S_FINISH_OUTER, S_X_IN, S_X_OTHER, ShortTrack
+from nano_track import CROSS_THRESHOLD, S_FINISH_OUTER, S_X_IN, S_X_OTHER, ShortTrack
 from params import Controller, Geometry, Layout, Motor
 from scenes.base import RunClock, path_time
 from track import Block
@@ -50,7 +51,7 @@ CUBE_SIDE = 50.0
 GREEN = ("#22C55E", "#166534")
 CRIMSON = ("#DB2777", "#831843")
 PID = PD              # kp 0,06, kd 1 — итог 2c; ki — KI из 3a
-THRESHOLD = 300.0     # порог перекрестка: оба датчика ниже — перекресток (порог 500 выброс uD на X не убирает)
+THRESHOLD = CROSS_THRESHOLD   # порог перекрестка курса (nano_track.py)
 DELAY = 0.26          # «задержка» до центра X, с: motors(speed, speed); delay(260); motors(0, 0) — подобрано bisect,
                       # с докатыванием ось колес встает на X (±2 мм)
 LIMIT_CM = 15         # порог дальномера: кубик при сканировании — 4 см (ось на X, кубик в 16 см), без кубика — 60
@@ -68,7 +69,7 @@ DIST = Signal("dist, см", "dist", "dist")
 U_FORMULA = ("control = uP + uD + uI", [("control", "u"), ("uP", "e"), ("uD", "D"), ("uI", "I")])
 D_FORMULA = (f"dist < {LIMIT_CM}", [("dist", "dist")])
 SIDE = {+1: "налево", -1: "направо", 0: "прямо"}
-FINISH_AT = {+1: 1, -1: 3, 0: 1}   # куда поехал робот → номер финишного перекрестка по маршруту (см. докстринг)
+FINISH_AT = {+1: 1, -1: 3, 0: 3}   # куда поехал робот → номер финишного перекрестка по маршруту (см. докстринг)
 TITLE = "Куда повернуть?"   # один для всех версий: пояснение в шапке 16:9 всегда начинается с одного места
 
 

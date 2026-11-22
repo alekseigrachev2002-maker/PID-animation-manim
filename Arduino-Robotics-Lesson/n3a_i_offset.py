@@ -17,7 +17,7 @@ from visuals.panel import Signal
 
 START = S_TURN_START
 PD = dict(kp=KP_ALMOST, kd=1.0)    # итог 2c — регулятор уроков 3 и 4
-KI = 0.005
+KI = 0.005            # err → 0 за прогон; с 0,002 в 4a робот теряет линию на S-изгибах после внутренних петель
 
 
 class Nano3a(NanoRunSeries):
