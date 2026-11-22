@@ -35,15 +35,16 @@ HAND = 0.85 * GENERAL  # движения «рукой»: перестановк
 MOTION = 8.0  # подсцена: движение, с видео (прогон с докатыванием, маневр); заголовок, подписи, «рука» — сверх
 SEGMENTS = {}  # имя сцены → моменты концов подсцен в видео, с (заполняется при рендере; картинки уроков)
 FAST_TAU = 0.5  # плавность перехода ускорения: постоянная EMA, с времени модели
-HAND_V = 150.0  # «рука»: средняя скорость переноса, мм/с (время модели; на экране — с замедлением HAND)
-HAND_W = 120.0  # «рука»: средняя скорость поворота, °/с
+HAND_V = 150.0  # «рука»: средняя скорость переноса, мм/с (время модели; на экране — с замедлением HAND); сцена — hand_v
+HAND_W = 120.0  # «рука»: средняя скорость поворота, °/с; сцена — hand_w
 HAND_MIN = 0.4  # самая короткая перестановка, с
 
 
-def hand_time(a, b):
-    """Время перестановки «рукой» из позы a в позу b (сдвиг и поворот вместе), с — одна скорость для всех сцен."""
+def hand_time(a, b, v=HAND_V, w=HAND_W):
+    """Время перестановки «рукой» из позы a в позу b (сдвиг и поворот вместе), с: v — скорость переноса, мм/с,
+    w — поворота, °/с (по умолчанию одни для всех олимпиадных сцен)."""
     dpsi = abs((b[2] - a[2] + np.pi) % (2 * np.pi) - np.pi)
-    return max(np.hypot(b[0] - a[0], b[1] - a[1]) / HAND_V, np.degrees(dpsi) / HAND_W, HAND_MIN)
+    return max(np.hypot(b[0] - a[0], b[1] - a[1]) / v, np.degrees(dpsi) / w, HAND_MIN)
 
 
 def warp(t0, t1, zones, fast, tau=FAST_TAU, speed=PLAYBACK, dt=0.002):
@@ -82,6 +83,8 @@ class PIDScene(Scene):
     rot = 0.0  # поворот камеры, рад; "start" — стартовый курс робота смотрит вверх
     fast = 1.0  # ускорение простой езды (advance_fast); 1,0 — без ускорения
     panel_bg = True  # темная панель графиков слева; False — поле на весь кадр
+    hand_v = HAND_V  # «рука» (hand_to): скорость переноса, мм/с
+    hand_w = HAND_W  # «рука» (hand_to): скорость поворота, °/с
 
     def play(self, *args, **kwargs):
         """Как Scene.play, плюс счет кадров видео (frames) — по тому же правилу, что у Manim: шагов 1/fps в run_time.
@@ -206,10 +209,10 @@ class PIDScene(Scene):
 
     def hand_to(self, target, *extra):
         """Переставить робота «рукой» в позу target (сдвиг и поворот вместе, колеса не крутятся) — с одной
-        скоростью для всех сцен (hand_time); extra — анимации на это же время (смена подписи)."""
+        скоростью сцены (hand_time с hand_v, hand_w); extra — анимации на это же время (смена подписи)."""
         a = self.end_pose()
         dpsi = (target[2] - a[2] + np.pi) % (2 * np.pi) - np.pi
-        t = hand_time(a, target)
+        t = hand_time(a, target, self.hand_v, self.hand_w)
         self.switch(model.move(self.track, a, (target[0], target[1], a[2] + dpsi), t, roll=False,
                                geom=self.geom, sensor=self.sensor))
         self.advance(t, *extra, speed=HAND)

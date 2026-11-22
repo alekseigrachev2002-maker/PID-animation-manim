@@ -289,17 +289,18 @@ def _commanded(track, s, moving, cmd, t_on, ctrl, geom, sensor, motor, stop=Fals
     return _pack(np.hstack(cont), np.array(ticks), np.nan)
 
 
-def brake(track, traj, ctrl=Controller(), geom=Geometry(), sensor=Sensor(), motor=Motor()):
+def brake(track, traj, ctrl=Controller(), geom=Geometry(), sensor=Sensor(), motor=Motor(), pwm=(0.0, 0.0), t_on=0.0):
     """Остановка после прогона: motors(0, 0), робот докатывается, пока колеса не встанут.
 
     Стартует из конца траектории traj с теми же скоростями колес; путь колес продолжается.
     Последние команды регулятора еще в очереди задержки — колеса узнают о стопе через Motor.delay.
+    t_on > 0 — перед стопом еще t_on секунд ШИМ физических колес pwm = (левое, правое): motors(pwm); delay(t_on).
     """
     s = np.array([traj.x[-1], traj.y[-1], traj.psi[-1], traj.vL[-1], traj.vR[-1], traj.sL[-1], traj.sR[-1]])
     moving = [abs(s[3]) > motor.stop_eps, abs(s[4]) > motor.stop_eps]
     n = int(round(motor.delay / ctrl.period))
     pending = list(zip(traj.pwmL, traj.pwmR))[len(traj.tt) - n:] if n else []
-    return _commanded(track, s, moving, lambda t: (0, 0), 0.0, ctrl, geom, sensor, motor, stop=True,
+    return _commanded(track, s, moving, lambda t: pwm, t_on, ctrl, geom, sensor, motor, stop=True,
                       pending=pending)
 
 
