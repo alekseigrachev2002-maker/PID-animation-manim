@@ -151,8 +151,8 @@ class Nano4a(NanoScene):
 
     def decision(self):
         if not self.cube:
-            return "кубика нет — едем прямо"
-        return f"кубик {'слева' if self.cube_side > 0 else 'справа'} — едем {SIDE[self.go_side]}"
+            return "кубика нет: едем прямо"
+        return f"кубик {'слева' if self.cube_side > 0 else 'справа'}: едем {SIDE[self.go_side]}"
 
     def look_result(self, seg2, t0, t1):
         """Итог одного взгляда: самый короткий dist за поворот — кубик (см) или «кубика нет»."""
@@ -229,7 +229,7 @@ class Nano4a(NanoScene):
         self.begin_segment()
         self.advance_fast(run1.t[-1], self.zones(run1, SLOW_START))
         self.ui_freeze()
-        self.advance(seg1.t[-1], *self.ui_caption("перекресток — доезжаем до центра, стоп"))
+        self.advance(seg1.t[-1], *self.ui_caption("перекресток: доезжаем до центра, стоп"))
         self.end_segment(check=False)
 
         # 2: сканирование дальномером, решение, поворот
@@ -240,9 +240,9 @@ class Nano4a(NanoScene):
         t1 = p["look1"].t[-1]
         t2 = t1 + p["look2"].t[-1]
         self.advance(t1)
-        self.play(*self.ui_caption(f"смотрим {SIDE[p['first']]} — {self.look_result(seg2, 0.0, t1)}"), run_time=0.8)
+        self.play(*self.ui_caption(f"смотрим {SIDE[p['first']]}: {self.look_result(seg2, 0.0, t1)}"), run_time=0.8)
         self.advance(t2, *self.ui_caption(f"смотрим {SIDE[p['second']]}"))
-        self.play(*self.ui_caption(f"смотрим {SIDE[p['second']]} — {self.look_result(seg2, t1, t2)}"), run_time=0.8)
+        self.play(*self.ui_caption(f"смотрим {SIDE[p['second']]}: {self.look_result(seg2, t1, t2)}"), run_time=0.8)
         self.play(*self.ui_caption(self.decision()), run_time=0.8)
         self.advance(seg2.t[-1])
         self.ui_freeze()
@@ -256,7 +256,7 @@ class Nano4a(NanoScene):
         self.begin_segment()
         self.advance_fast(run3.t[-1], self.zones(run3, SLOW_AFTER))
         self.ui_freeze()
-        self.advance(seg3.t[-1], *self.ui_caption(f"финиш — стоп на {self.stop_at}-м перекрестке"))
+        self.advance(seg3.t[-1], *self.ui_caption(f"финиш: стоп на {self.stop_at}-м перекрестке"))
         self.end_segment(check=False)
         self.wait(0.5, frozen_frame=False)
 

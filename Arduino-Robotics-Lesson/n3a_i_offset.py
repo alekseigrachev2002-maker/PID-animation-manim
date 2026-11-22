@@ -28,7 +28,7 @@ class Nano3a(NanoRunSeries):
     y = ("u", -25, 100)             # uP до ~42 (полка err ≈ 700), uI до ~57
     runs = [
         (dict(PD, ki=0.0), "ki = 0"),
-        (dict(PD, ki=KI), f"ki = {KI:g} — err → 0".replace(".", ",")),
+        (dict(PD, ki=KI), f"ki = {KI:g}: err → 0".replace(".", ",")),
     ]
 
     def make_track(self):

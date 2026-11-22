@@ -26,7 +26,7 @@ MANEUVERS = [
          fit="ramp"),
     dict(caption="оборот на месте", code="motors(-250, 250)", colors=[("-250", "L"), ("250", "R", 1)],
          pwm=(-250, 250), fit="turn", turn=360),
-    dict(caption="правое колесо быстрее — влево", code="motors(150, 180)", colors=[("150", "L"), ("180", "R")],
+    dict(caption="правое колесо быстрее: влево", code="motors(150, 180)", colors=[("150", "L"), ("180", "R")],
          pwm=(150, 180), fit="on"),
 ]
 
